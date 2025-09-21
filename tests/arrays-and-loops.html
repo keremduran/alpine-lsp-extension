@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+    <!-- Test 1: Simple array iteration -->
+    <div x-data="{ fruits: ['Apple', 'Banana', 'Orange', 'Mango'] }">
+        <template x-for="fruit in fruits" :key="fruit">
+            <li x-text="fruit"></li>
+        </template>
+    </div>
+
+    <!-- Test 2: Array of objects with properties -->
+    <div x-data="{
+        users: [
+            { id: 1, name: 'John', age: 30, email: 'john@example.com' },
+            { id: 2, name: 'Jane', age: 25, email: 'jane@example.com' },
+            { id: 3, name: 'Bob', age: 35, email: 'bob@example.com' }
+        ]
+    }">
+        <template x-for="user in users" :key="user.id">
+            <div>
+                <span x-text="user.name"></span>
+                <span x-text="user.age"></span>
+                <span x-text="user.email"></span>
+                <!-- Test accessing nested property -->
+                <span x-text="user.id"></span>
+            </div>
+        </template>
+    </div>
+
+    <!-- Test 3: Nested arrays and objects -->
+    <div x-data="{
+        departments: [
+            {
+                name: 'Engineering',
+                employees: [
+                    { name: 'Alice', role: 'Senior Dev', skills: ['JS', 'Python', 'Go'] },
+                    { name: 'Bob', role: 'Junior Dev', skills: ['JS', 'HTML'] }
+                ]
+            },
+            {
+                name: 'Marketing',
+                employees: [
+                    { name: 'Charlie', role: 'Manager', skills: ['SEO', 'Content'] }
+                ]
+            }
+        ]
+    }">
+        <template x-for="dept in departments" :key="dept.name">
+            <div>
+                <h3 x-text="dept.name"></h3>
+                <template x-for="emp in dept.employees" :key="emp.name">
+                    <div>
+                        <span x-text="emp.name"></span>
+                        <span x-text="emp.role"></span>
+                        <template x-for="skill in emp.skills" :key="skill">
+                            <span x-text="skill"></span>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </template>
+    </div>
+
+    <!-- Test 4: Array with index -->
+    <div x-data="{ colors: ['red', 'green', 'blue', 'yellow'] }">
+        <template x-for="(color, index) in colors" :key="index">
+            <div>
+                <span x-text="index"></span>
+                <span x-text="color"></span>
+            </div>
+        </template>
+    </div>
+
+    <!-- Test 5: Dynamic array manipulation -->
+    <div x-data="{
+        todos: [
+            { id: 1, text: 'Learn Alpine', done: false },
+            { id: 2, text: 'Build LSP', done: false }
+        ],
+        addTodo(text) {
+            this.todos.push({
+                id: Date.now(),
+                text: text,
+                done: false
+            })
+        },
+        removeTodo(id) {
+            this.todos = this.todos.filter(t => t.id !== id)
+        }
+    }">
+        <template x-for="todo in todos" :key="todo.id">
+            <div>
+                <input type="checkbox" x-model="todo.done">
+                <span x-text="todo.text"></span>
+                <button @click="removeTodo(todo.id)">Delete</button>
+            </div>
+        </template>
+        <button @click="addTodo('New Task')">Add Todo</button>
+    </div>
+
+    <!-- Test 6: Computed/filtered arrays -->
+    <script>
+        function todoApp() {
+            return {
+                todos: [
+                    { id: 1, text: 'Task 1', priority: 'high', done: false },
+                    { id: 2, text: 'Task 2', priority: 'low', done: true },
+                    { id: 3, text: 'Task 3', priority: 'high', done: false }
+                ],
+                get highPriorityTodos() {
+                    return this.todos.filter(t => t.priority === 'high' && !t.done)
+                },
+                get completedTodos() {
+                    return this.todos.filter(t => t.done)
+                }
+            }
+        }
+    </script>
+    <div x-data="todoApp()">
+        <h3>High Priority:</h3>
+        <template x-for="todo in highPriorityTodos" :key="todo.id">
+            <div x-text="todo.text"></div>
+        </template>
+
+        <h3>Completed:</h3>
+        <template x-for="todo in completedTodos" :key="todo.id">
+            <div x-text="todo.text"></div>
+        </template>
+    </div>
+</body>
+</html>

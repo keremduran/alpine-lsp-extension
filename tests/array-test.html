@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Array Type Test</title>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+    <!-- Simple array test -->
+    <div x-data="{ items: ['Apple', 'Banana', 'Orange'] }">
+        <div x-text="items"></div>
+
+        <template x-for="item in items">
+            <div x-text="item"></div>
+        </template>
+    </div>
+
+    <!-- Object array test -->
+    <div x-data="{ users: [{ id: 1, name: 'John' }, { id: 2, name: 'Jane' }] }">
+        <template x-for="user in users">
+            <div>
+                <span x-text="user.name"></span>
+                <span x-text="user.id"></span>
+            </div>
+        </template>
+    </div>
+</body>
+</html>
