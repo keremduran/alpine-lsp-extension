@@ -257,4 +257,69 @@ export class LineBasedTypeScriptService {
     console.log('No hover info found for any position');
     return undefined;
   }
+
+  /**
+   * Get hover for a specific character within an expression on a virtual line
+   */
+  getHoverForVirtualLineAtChar(
+    virtualUri: string,
+    virtualLine: number,
+    expression: string,
+    charInExpression: number
+  ): string | undefined {
+    console.log(`Getting hover for virtual line ${virtualLine}, char ${charInExpression} in expression: "${expression}"`);
+
+    if (!this.virtualFiles.has(virtualUri)) {
+      return undefined;
+    }
+
+    const content = this.virtualFiles.get(virtualUri)!;
+    const lines = content.split('\n');
+
+    if (virtualLine >= lines.length) {
+      return undefined;
+    }
+
+    const line = lines[virtualLine];
+    console.log(`Line content: "${line}"`);
+    console.log(`Looking for expression: "${expression}" at char ${charInExpression}`);
+
+    // Find where the expression appears in the virtual line
+    let targetPosition = -1;
+
+    // Look for the expression in the line (it should be inside the arrow function)
+    const arrowMatch = line.match(/=>\s*\{\s*(.+?)\s*\}/);
+    if (arrowMatch) {
+      const expressionInLine = arrowMatch[1];
+      console.log(`Arrow match found: "${expressionInLine}", looking for: "${expression}"`);
+
+      if (expressionInLine === expression) {
+        // Found exact match - calculate position
+        const arrowStart = line.indexOf(arrowMatch[0]);
+        const expressionStart = line.indexOf(expressionInLine, arrowStart);
+        targetPosition = expressionStart + charInExpression;
+        console.log(`Using arrow match at position ${targetPosition}`);
+      }
+    }
+
+    if (targetPosition === -1) {
+      console.log('Could not find expression in line');
+      return undefined;
+    }
+
+    // Convert line position to absolute position in file
+    const absolutePosition = this.getPositionFromLineAndCharacter(content, virtualLine, targetPosition);
+    console.log(`Final hover position: char ${targetPosition} (offset ${absolutePosition}) in line: "${line}"`);
+
+    try {
+      const quickInfo = this.languageService.getQuickInfoAtPosition(virtualUri, absolutePosition);
+      if (quickInfo && quickInfo.displayParts) {
+        return quickInfo.displayParts.map(part => part.text).join('');
+      }
+    } catch (error) {
+      console.error('Error getting quick info:', error);
+    }
+
+    return undefined;
+  }
 }

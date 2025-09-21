@@ -228,8 +228,20 @@ connection.onHover((params: HoverParams): Hover | null => {
     console.log('Simple mapping found:', mapping);
     console.log('Virtual line for expression:', virtualLine);
 
-    // Get TypeScript hover for the dynamically found line
-    const tsHover = virtualTsService.getHoverForVirtualLine(virtualFile.uri, virtualLine);
+    // Calculate which character in the expression we're hovering on
+    const expressionStartInHtml = mapping.htmlPosition.character;
+    const hoverCharInHtml = params.position.character;
+    const charOffsetInExpression = hoverCharInHtml - expressionStartInHtml;
+
+    console.log(`Hover at HTML char ${hoverCharInHtml}, expression starts at ${expressionStartInHtml}, offset: ${charOffsetInExpression}`);
+
+    // Get TypeScript hover for the specific character position
+    const tsHover = virtualTsService.getHoverForVirtualLineAtChar(
+      virtualFile.uri,
+      virtualLine,
+      mapping.expression,
+      charOffsetInExpression
+    );
     if (!tsHover) return null;
 
     return {

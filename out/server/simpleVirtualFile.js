@@ -56,9 +56,10 @@ class SimpleVirtualFileManager {
             if (component.xDataContent) {
                 // Evaluate the x-data object to get ALL keys using Object.keys()
                 const allProperties = this.extractPropertiesUsingObjectKeys(component.xDataContent);
-                lines.push(`  const data = (${component.xDataContent});`);
+                // Alpine data is mutable - use let not const! Don't change this to const
+                lines.push(`  let data = ${component.xDataContent};`);
                 if (allProperties.length > 0) {
-                    // We know the properties, destructure them
+                    // Alpine properties are mutable - use let not const! Don't change this to const
                     lines.push(`  let {${allProperties.join(', ')}} = data;`);
                 }
                 else {
@@ -68,7 +69,7 @@ class SimpleVirtualFileManager {
                     const usedVariables = this.extractVariablesFromDirectives(directives.filter(d => d.parentComponent === component || component.directives.includes(d)));
                     const allVars = [...new Set([...Array.from(component.variables.keys()), ...usedVariables])];
                     if (allVars.length > 0) {
-                        // Simple destructuring - let TypeScript infer the types naturally
+                        // Alpine variables are mutable - use let not const! Don't change this to const
                         lines.push(`  let {${allVars.join(', ')}} = data;`);
                     }
                 }
@@ -76,8 +77,8 @@ class SimpleVirtualFileManager {
             }
             // Get directives for this component
             const componentDirectives = directives.filter(d => d.parentComponent === component || component.directives.includes(d));
-            // Create expression map with unique IDs
-            lines.push(`  const expressionMap = {`);
+            // Alpine expressions reference mutable data - use let not const! Don't change this to const
+            lines.push(`  let expressionMap = {`);
             for (const directive of componentDirectives) {
                 const htmlPosition = document.positionAt(directive.range.start);
                 // Create unique ID based on HTML position
@@ -221,4 +222,76 @@ class SimpleVirtualFileManager {
     }
 }
 exports.SimpleVirtualFileManager = SimpleVirtualFileManager;
+function component_0() {
+    const data = {
+        company: {
+            name: 'TechCorp',
+            info: {
+                address: {
+                    street: '123 Main St',
+                    city: 'San Francisco',
+                    state: 'CA',
+                    country: {
+                        code: 'US',
+                        name: 'United States',
+                        continent: 'North America'
+                    }
+                },
+                contact: {
+                    phone: {
+                        main: '+1-555-0100',
+                        support: '+1-555-0199',
+                        fax: '+1-555-0101'
+                    },
+                    email: {
+                        general: 'info@techcorp.com',
+                        support: 'support@techcorp.com',
+                        sales: 'sales@techcorp.com'
+                    }
+                }
+            },
+            departments: {
+                engineering: {
+                    head: 'John Doe',
+                    budget: 1000000,
+                    teams: {
+                        frontend: {
+                            lead: 'Jane Smith',
+                            members: 5,
+                            projects: ['Website', 'Mobile App']
+                        },
+                        backend: {
+                            lead: 'Bob Johnson',
+                            members: 8,
+                            projects: ['API', 'Database', 'Microservices']
+                        }
+                    }
+                },
+                marketing: {
+                    head: 'Alice Brown',
+                    budget: 500000,
+                    campaigns: {
+                        active: ['Summer Sale', 'Product Launch'],
+                        planned: ['Black Friday', 'Holiday Season']
+                    }
+                }
+            }
+        }
+    };
+    const { company } = data;
+    const expressionMap = {
+        "expr_63_18": () => { company.name; }, // x-text
+        "expr_64_18": () => { company.info.address.street; }, // x-text
+        "expr_65_18": () => { company.info.address.city; }, // x-text
+        "expr_66_18": () => { company.info.address.country.name; }, // x-text
+        "expr_67_18": () => { company.info.address.country.continent; }, // x-text
+        "expr_68_18": () => { company.info.contact.phone.main; }, // x-text
+        "expr_69_18": () => { company.info.contact.email.support; }, // x-text
+        "expr_70_18": () => { company.departments.engineering.head; }, // x-text
+        "expr_71_18": () => { company.departments.engineering.teams.frontend.lead; }, // x-text
+        "expr_72_18": () => { company.departments.engineering.teams.frontend.members; }, // x-text
+        "expr_75_24": () => { for (let project of company.departments.engineering.teams.frontend.projects) { } }, // x-for
+        "expr_76_23": () => { }, // x-text
+    };
+}
 //# sourceMappingURL=simpleVirtualFile.js.map
