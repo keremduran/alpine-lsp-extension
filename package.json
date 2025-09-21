@@ -1,0 +1,81 @@
+{
+  "name": "alpine-lsp",
+  "displayName": "Alpine.js LSP",
+  "description": "Language server for Alpine.js with goto definition support",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./out/client/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "html",
+        "extensions": [
+          ".html",
+          ".htm"
+        ]
+      },
+      {
+        "id": "astro",
+        "extensions": [
+          ".astro"
+        ]
+      }
+    ],
+    "grammars": [
+      {
+        "scopeName": "alpine.injection",
+        "path": "./syntaxes/alpine.injection.json",
+        "injectTo": ["text.html", "source.astro"],
+        "embeddedLanguages": {
+          "source.js.embedded.alpine": "javascript"
+        }
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Alpine LSP",
+      "properties": {
+        "alpineLsp.trace.server": {
+          "scope": "window",
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the language server."
+        }
+      }
+    }
+  },
+  "activationEvents": [
+    "onLanguage:html",
+    "onLanguage:astro"
+  ],
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p . && npm run build-client && npm run build-server",
+    "build-client": "esbuild src/client/extension.ts --bundle --outfile=out/client/extension.js --external:vscode --format=cjs --platform=node",
+    "build-server": "esbuild src/server/server.ts --bundle --outfile=out/server/server.js --format=cjs --platform=node --external:vscode-html-languageservice --external:vscode-css-languageservice",
+    "watch": "tsc -watch -p ."
+  },
+  "dependencies": {
+    "@typescript/vfs": "^1.6.1",
+    "vscode-html-languageservice": "^5.5.1",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/vscode": "^1.75.0",
+    "esbuild": "^0.25.10",
+    "typescript": "^5.9.2"
+  }
+}

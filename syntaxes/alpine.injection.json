@@ -1,0 +1,64 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "scopeName": "alpine.injection",
+  "injectionSelector": "L:text.html -meta.embedded -source.css -source.js, L:source.astro",
+  "patterns": [
+    {
+      "include": "#alpine-attributes"
+    }
+  ],
+  "repository": {
+    "alpine-attributes": {
+      "patterns": [
+        {
+          "comment": "Alpine directives with JavaScript expressions",
+          "match": "\\b(x-(?:data|show|if|for|text|html|model|modelable|effect|ignore|ref|cloak|teleport|intersect|init|transition))(?:[:.]([\\w\\-]+))?\\s*(=)\\s*([\"'])([^\"']*?)\\4",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.html" },
+            "2": { "name": "entity.other.attribute-name.html" },
+            "3": { "name": "punctuation.separator.key-value.html" },
+            "4": { "name": "punctuation.definition.string.begin.html" },
+            "5": { "name": "source.js" },
+            "6": { "name": "punctuation.definition.string.end.html" }
+          }
+        },
+        {
+          "comment": "Alpine @ event handlers (like @click)",
+          "match": "(@)(\\w+(?:[:.\\-]\\w+)*)\\s*(=)\\s*([\"'])([^\"']*?)\\4",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.html" },
+            "2": { "name": "entity.other.attribute-name.html" },
+            "3": { "name": "punctuation.separator.key-value.html" },
+            "4": { "name": "punctuation.definition.string.begin.html" },
+            "5": { "name": "source.js" },
+            "6": { "name": "punctuation.definition.string.end.html" }
+          }
+        },
+        {
+          "comment": "Alpine x-on event handlers",
+          "match": "\\b(x-on):(\\w+(?:[:.\\-]\\w+)*)\\s*(=)\\s*([\"'])([^\"']*?)\\4",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.html" },
+            "2": { "name": "entity.other.attribute-name.html" },
+            "3": { "name": "punctuation.separator.key-value.html" },
+            "4": { "name": "punctuation.definition.string.begin.html" },
+            "5": { "name": "source.js" },
+            "6": { "name": "punctuation.definition.string.end.html" }
+          }
+        },
+        {
+          "comment": "Alpine : binding shorthand",
+          "match": "(:)([\\w\\-]+)\\s*(=)\\s*([\"'])([^\"']*?)\\4",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.html" },
+            "2": { "name": "entity.other.attribute-name.html" },
+            "3": { "name": "punctuation.separator.key-value.html" },
+            "4": { "name": "punctuation.definition.string.begin.html" },
+            "5": { "name": "source.js" },
+            "6": { "name": "punctuation.definition.string.end.html" }
+          }
+        }
+      ]
+    }
+  }
+}
