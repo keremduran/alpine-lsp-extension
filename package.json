@@ -30,7 +30,10 @@
       {
         "scopeName": "alpine.injection",
         "path": "./syntaxes/alpine.injection.json",
-        "injectTo": ["text.html", "source.astro"],
+        "injectTo": [
+          "text.html",
+          "source.astro"
+        ],
         "embeddedLanguages": {
           "source.js.embedded.alpine": "javascript"
         }
@@ -67,6 +70,7 @@
   },
   "dependencies": {
     "@typescript/vfs": "^1.6.1",
+    "jsdom": "^27.0.0",
     "vscode-html-languageservice": "^5.5.1",
     "vscode-languageclient": "^9.0.1",
     "vscode-languageserver": "^9.0.1",
@@ -77,5 +81,19 @@
     "@types/vscode": "^1.75.0",
     "esbuild": "^0.25.10",
     "typescript": "^5.9.2"
-  }
+  },
+  "directories": {
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keremduran/alpine-lsp-extension.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/keremduran/alpine-lsp-extension/issues"
+  },
+  "homepage": "https://github.com/keremduran/alpine-lsp-extension#readme"
 }

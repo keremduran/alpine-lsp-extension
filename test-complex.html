@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <div x-data="{
+        user: { name: 'John', age: 30, profile: { theme: 'dark', notifications: true } },
+        items: ['Apple', 'Banana', 'Cherry'],
+        count: 42,
+        isActive: true,
+        getData() { return this.user.name + ' - ' + this.count },
+        multiLineExpression: `Hello
+World
+Test`
+    }">
+        <!-- Basic property access -->
+        <h1 x-text="user.name"></h1>
+        <p x-text="count"></p>
+        <span x-text="isActive"></span>
+
+        <!-- Nested object access -->
+        <div x-text="user.profile.theme"></div>
+        <span x-text="user.profile.notifications"></span>
+
+        <!-- Array access -->
+        <p x-text="items.length"></p>
+        <div x-text="items[0]"></div>
+
+        <!-- Method calls -->
+        <span x-text="getData()"></span>
+
+        <!-- Complex expressions -->
+        <div x-text="count > 30 ? 'High' : 
+            'Low'"></div>
+        <span x-text="`User: ${user.name}, Age: ${user.age}`"></span>
+
+        <!-- Multi-line template literal -->
+        <p x-text="`Line 1: ${user.name}
+Line 2: ${count}
+Line 3: Done`"></p>
+
+        <!-- Event handlers -->
+        <button @click="count++">Increment</button>
+        <button @click="user.age = user.age + 1">Age Up</button>
+
+        <!-- Conditional display -->
+        <div x-show="count > 40"></div>
+        <span x-show="user.profile.notifications && isActive"></span>
+
+        <!-- Different quote styles -->
+        <div x-text='user.name'></div>
+        <span x-text="items.join(', ')"></span>
+    </div>
+</body>
+</html>
