@@ -4,7 +4,8 @@
       "Bash(npm run compile:*)",
       "Bash(npx tsc:*)",
       "Bash(node:*)",
-      "Bash(/dev/null)"
+      "Bash(/dev/null)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []

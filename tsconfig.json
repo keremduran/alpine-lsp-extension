@@ -7,10 +7,22 @@
     "rootDir": "src",
     "sourceMap": true,
     "strict": true,
+    // "noImplicitAny": false,
+    // "noImplicitReturns": false,
+    // "noImplicitThis": false,
+    // "strictFunctionTypes": false,
+    // "strictNullChecks": false,
+    // "strictBindCallApply": false,
+    // "strictPropertyInitialization": false,
+    // "alwaysStrict": false,
+    // "exactOptionalPropertyTypes": false,
+    // "noImplicitOverride": false,
+    // "noPropertyAccessFromIndexSignature": false,
+    // "noUncheckedIndexedAccess": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src"],
+  "include": ["src", "*.ts"],
   "exclude": ["node_modules", ".vscode-test"]
 }

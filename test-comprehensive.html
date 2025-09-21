@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Comprehensive Alpine.js LSP Test</title>
+</head>
+<body>
+    <!-- 🎯 COMPREHENSIVE TEST: All Alpine.js features + edge cases -->
+
+    <!-- ===== COMPLEX X-DATA ===== -->
+    <div x-data="{
+        // Complex nested data structures
+        users: [
+            {
+                id: 1,
+                name: 'Alice Smith',
+                age: 28,
+                isActive: true,
+                profile: {
+                    email: 'alice@example.com',
+                    preferences: { theme: 'dark', lang: 'en' },
+                    settings: { notifications: true }
+                },
+                posts: [
+                    { id: 101, title: 'Hello World', likes: 42, tags: ['intro', 'welcome'] },
+                    { id: 102, title: 'Alpine.js Tips', likes: 128, tags: ['js', 'alpine', 'tips'] }
+                ],
+                followers: ['bob', 'charlie', 'diana']
+            },
+            {
+                id: 2,
+                name: 'Bob Johnson',
+                age: 34,
+                isActive: false,
+                profile: {
+                    email: 'bob@example.com',
+                    preferences: { theme: 'light', lang: 'es' },
+                    settings: { notifications: false }
+                },
+                posts: [
+                    { id: 201, title: 'Vue vs Alpine', likes: 89, tags: ['vue', 'alpine', 'comparison'] }
+                ],
+                followers: ['alice', 'eve']
+            }
+        ],
+
+        // Arrays and objects
+        categories: ['tech', 'lifestyle', 'education'],
+        stats: { totalUsers: 2, activeUsers: 1, totalPosts: 3 },
+        filters: { minLikes: 50, category: null, isActive: null },
+
+        // Primitives and edge cases
+        searchQuery: '',
+        isLoading: false,
+        selectedUser: null,
+        count: 0,
+
+        // Functions with complex logic
+        getUsersByCategory(category) {
+            return this.users.filter(user =>
+                user.posts.some(post => post.tags.includes(category))
+            );
+        },
+
+        getPopularPosts() {
+            return this.users
+                .flatMap(user => user.posts)
+                .filter(post => post.likes > this.filters.minLikes)
+                .sort((a, b) => b.likes - a.likes);
+        },
+
+        toggleUserStatus(userId) {
+            const user = this.users.find(u => u.id === userId);
+            if (user) user.isActive = !user.isActive;
+        }
+    }">
+
+        <!-- ===== BASIC EXPRESSIONS ===== -->
+        <h1 x-text="`Welcome to ${stats.totalUsers} users platform`"></h1>
+        <p x-show="isLoading">Loading...</p>
+        <p x-show="!isLoading && searchQuery.length > 0" x-text="`Searching for: ${searchQuery}`"></p>
+
+        <!-- ===== FORM BINDINGS ===== -->
+        <input x-model="searchQuery" placeholder="Search users..." />
+        <select x-model="filters.category">
+            <option value="">All categories</option>
+            <option x-for="cat in categories" :value="cat" x-text="cat"></option>
+        </select>
+
+        <!-- ===== SIMPLE X-FOR LOOPS ===== -->
+        <h2>Categories</h2>
+        <ul>
+            <template x-for="category in categories">
+                <li x-text="category.toUpperCase()"></li>
+            </template>
+        </ul>
+
+        <!-- ===== X-FOR WITH INDEX ===== -->
+        <h2>Categories with Index</h2>
+        <ol>
+            <template x-for="(category, index) in categories">
+                <li x-text="`${index + 1}. ${category}`"></li>
+            </template>
+        </ol>
+
+        <!-- ===== NESTED X-FOR LOOPS ===== -->
+        <h2>Users and Posts</h2>
+        <div>
+            <template x-for="(user, userIndex) in users">
+                <div class="user-card">
+                    <h3 x-text="`User #${userIndex + 1}: ${user.name}`"></h3>
+                    <p x-text="`Age: ${user.age}, Active: ${user.isActive ? 'Yes' : 'No'}`"></p>
+                    <p x-text="`Email: ${user.profile.email}`"></p>
+                    <p x-text="`Theme: ${user.profile.preferences.theme}`"></p>
+
+                    <!-- Nested loop: posts -->
+                    <h4>Posts:</h4>
+                    <template x-for="(post, postIndex) in user.posts">
+                        <div class="post">
+                            <h5 x-text="`Post ${postIndex + 1}: ${post.title}`"></h5>
+                            <p x-text="`Likes: ${post.likes}`"></p>
+                            <p x-show="post.likes > 100" x-text="'🔥 Popular post!'"></p>
+
+                            <!-- Triple nested loop: tags -->
+                            <div>
+                                <strong>Tags:</strong>
+                                <template x-for="tag in post.tags">
+                                    <span x-text="`#${tag}`" class="tag"></span>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Another nested loop: followers -->
+                    <h4>Followers:</h4>
+                    <template x-for="(follower, followerIndex) in user.followers">
+                        <span x-text="`${follower}${followerIndex < user.followers.length - 1 ? ', ' : ''}`"></span>
+                    </template>
+                </div>
+            </template>
+        </div>
+
+        <!-- ===== COMPLEX EXPRESSIONS ===== -->
+        <h2>Statistics</h2>
+        <p x-text="`Total posts: ${users.flatMap(u => u.posts).length}`"></p>
+        <p x-text="`Active users: ${users.filter(u => u.isActive).length}`"></p>
+        <p x-text="`Average age: ${(users.reduce((sum, u) => sum + u.age, 0) / users.length).toFixed(1)}`"></p>
+
+        <!-- ===== CONDITIONAL RENDERING ===== -->
+        <div x-show="users.some(u => u.isActive)">
+            <h3>Active Users Found!</h3>
+            <template x-for="user in users.filter(u => u.isActive)">
+                <p x-text="user.name"></p>
+            </template>
+        </div>
+
+        <!-- ===== EVENT HANDLERS ===== -->
+        <button @click="isLoading = !isLoading" x-text="isLoading ? 'Stop Loading' : 'Start Loading'"></button>
+        <button @click="count++" x-text="`Clicked ${count} times`"></button>
+
+        <!-- ===== EDGE CASES ===== -->
+
+        <!-- Empty arrays -->
+        <template x-for="item in []">
+            <p x-text="item">This won't render</p>
+        </template>
+
+        <!-- Complex object access -->
+        <p x-text="users[0]?.profile?.preferences?.theme || 'unknown'"></p>
+
+        <!-- Ternary operators -->
+        <p x-text="users.length > 0 ?
+                   `Found ${users.length} users` :
+                   'No users found'"></p>
+
+        <!-- Template literals with expressions -->
+        <p x-text="`${users.filter(u => u.isActive).length}/${users.length} users are active`"></p>
+
+        <!-- Function calls with complex parameters -->
+        <div x-show="getUsersByCategory('tech').length > 0">
+            <h3>Tech Users:</h3>
+            <template x-for="user in getUsersByCategory('tech')">
+                <p x-text="user.name"></p>
+            </template>
+        </div>
+
+        <!-- Array methods chaining -->
+        <h3>Popular Posts (>50 likes):</h3>
+        <template x-for="post in getPopularPosts()">
+            <div>
+                <p x-text="post.title"></p>
+                <p x-text="`${post.likes} likes`"></p>
+            </div>
+        </template>
+
+        <!-- Complex x-for with filter -->
+        <h3>Users with Multiple Posts:</h3>
+        <template x-for="user in users.filter(u => u.posts.length > 1)">
+            <p x-text="`${user.name} has ${user.posts.length} posts`"></p>
+        </template>
+
+        <!-- Nested object property access -->
+        <template x-for="user in users">
+            <div>
+                <p x-text="user.profile.settings.notifications ? 'Notifications ON' : 'Notifications OFF'"></p>
+            </div>
+        </template>
+
+        <!-- Math operations -->
+        <p x-text="`Total likes: ${users.flatMap(u => u.posts).reduce((sum, p) => sum + p.likes, 0)}`"></p>
+
+        <!-- String methods -->
+        <template x-for="user in users">
+            <p x-text="user.name.split(' ').map(n => n[0]).join('.')"></p>
+        </template>
+
+        <!-- Dynamic property access -->
+        <template x-for="user in users">
+            <p x-text="user['profile']['email']"></p>
+        </template>
+
+        <!-- Boolean logic -->
+        <p x-show="users.every(u => u.age > 18)" x-text="'All users are adults'"></p>
+        <p x-show="users.some(u => u.posts.length === 0)" x-text="'Some users have no posts'"></p>
+
+        <!-- Edge case: x-for with complex item names -->
+        <template x-for="(userWithLongVariableName, veryLongIndexName) in users">
+            <p x-text="`${veryLongIndexName}: ${userWithLongVariableName.name}`"></p>
+        </template>
+
+        <!-- Edge case: x-for with destructuring-like syntax -->
+        <template x-for="user_item in users">
+            <p x-text="user_item.name"></p>
+        </template>
+
+    </div>
+
+    <!-- ===== MULTIPLE X-DATA COMPONENTS ===== -->
+    <div x-data="{ simpleCounter: 0, items: ['apple', 'banana', 'cherry'] }">
+        <h2>Simple Component</h2>
+        <button @click="simpleCounter++" x-text="`Count: ${simpleCounter}`"></button>
+        <template x-for="(fruit, i) in items">
+            <p x-text="`${i + 1}. ${fruit}`"></p>
+        </template>
+    </div>
+
+    <!-- ===== EDGE CASE: EMPTY X-DATA ===== -->
+    <div x-data="{}">
+        <p x-text="'Empty data component'"></p>
+    </div>
+
+    <!-- ===== EDGE CASE: X-DATA WITH FUNCTION ===== -->
+    <div x-data="() => ({ message: 'From function', getValue: () => 42 })">
+        <p x-text="message"></p>
+        <p x-text="`Value: ${getValue()}`"></p>
+    </div>
+
+</body>
+</html>
