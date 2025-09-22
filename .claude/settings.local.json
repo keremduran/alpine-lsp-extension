@@ -5,7 +5,9 @@
       "Bash(npx tsc:*)",
       "Bash(node:*)",
       "Bash(/dev/null)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(npx vsce:*)",
+      "Bash(npm run build-server:*)"
     ],
     "deny": [],
     "ask": []

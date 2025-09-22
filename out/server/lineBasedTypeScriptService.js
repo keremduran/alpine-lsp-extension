@@ -54,18 +54,7 @@ class LineBasedTypeScriptService {
                 return content ? ts.ScriptSnapshot.fromString(content) : undefined;
             },
             getCurrentDirectory: () => process.cwd(),
-            getCompilationSettings: () => ({
-                target: ts.ScriptTarget.ES2020,
-                module: ts.ModuleKind.CommonJS,
-                strict: false, // Allow Alpine's loose typing
-                noImplicitAny: false, // Allow implicit any for Alpine
-                esModuleInterop: true,
-                skipLibCheck: true,
-                forceConsistentCasingInFileNames: true,
-                allowJs: true,
-                checkJs: false, // Don't check JS files too strictly
-                noEmit: true
-            }),
+            getCompilationSettings: () => ts.getDefaultCompilerOptions(),
             getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
             fileExists: ts.sys.fileExists,
             readFile: ts.sys.readFile,
@@ -290,6 +279,45 @@ class LineBasedTypeScriptService {
             const quickInfo = this.languageService.getQuickInfoAtPosition(virtualUri, absolutePosition);
             if (quickInfo && quickInfo.displayParts) {
                 return quickInfo.displayParts.map(part => part.text).join('');
+            }
+        }
+        catch (error) {
+            console.error('Error getting quick info:', error);
+        }
+        return undefined;
+    }
+    /**
+     * Update file content directly (for our new transformation system)
+     */
+    updateFileContent(uri, content) {
+        console.log(`Updating file content for ${uri}, length: ${content.length}`);
+        this.virtualFiles.set(uri, content);
+        // Increment version to force TypeScript cache invalidation
+        const currentVersion = this.fileVersions.get(uri) || 0;
+        const newVersion = currentVersion + 1;
+        this.fileVersions.set(uri, newVersion);
+        console.log(`File version incremented to ${newVersion} for ${uri}`);
+        // Force TypeScript to refresh
+        this.languageService.getProgram();
+    }
+    /**
+     * Get quick info at a specific position in a file
+     */
+    getQuickInfoAtPosition(uri, line, character) {
+        console.log(`Getting quick info at ${uri}:${line}:${character}`);
+        if (!this.virtualFiles.has(uri)) {
+            console.log('File not found:', uri);
+            return undefined;
+        }
+        const content = this.virtualFiles.get(uri);
+        const absolutePosition = this.getPositionFromLineAndCharacter(content, line, character);
+        console.log(`Absolute position: ${absolutePosition}`);
+        try {
+            const quickInfo = this.languageService.getQuickInfoAtPosition(uri, absolutePosition);
+            if (quickInfo && quickInfo.displayParts) {
+                const text = quickInfo.displayParts.map(part => part.text).join('');
+                console.log(`Quick info: ${text}`);
+                return text;
             }
         }
         catch (error) {

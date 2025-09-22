@@ -25,6 +25,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { AlpineParser } from './alpineParser';
 import { SimpleVirtualFileManager } from './simpleVirtualFile';
 import { LineBasedTypeScriptService } from './lineBasedTypeScriptService';
+import { transformHtmlToTypeScript, AlpineMapping } from './transform-html-to-ts-alpine';
 
 // Helper functions
 function mapTsCompletionKind(tsKind: string): CompletionItemKind {
@@ -210,48 +211,100 @@ connection.onHover((params: HoverParams): Hover | null => {
   if (!document) return null;
 
   try {
-    // Parse and generate virtual file
-    const parsed = alpineParser.parseDocument(document);
-    const virtualFile = virtualFileManager.generateVirtualFile(document, parsed.components, parsed.directives);
+    connection.console.log('🎯 Hover requested at: ' + JSON.stringify(params.position));
 
-    // Update TypeScript service with clean virtual file
-    virtualTsService.updateVirtualFile(virtualFile);
+    // Use our new transformation system
+    const transformation = transformHtmlToTypeScript(document.getText());
+    connection.console.log(`✅ Generated ${transformation.mappings.length} mappings`);
 
-    // Find mapping using simple approach
-    const mapping = virtualFileManager.findMappingForHtmlPosition(params.position, virtualFile.mappings);
-    if (!mapping) return null;
+    // Log the generated TypeScript content
+    connection.console.log('📄 Generated TypeScript:');
+    connection.console.log('=====================================');
+    connection.console.log(transformation.tsContent);
+    connection.console.log('=====================================');
 
-    // Find the actual virtual line by searching for the expression ID
-    const virtualLine = virtualFileManager.findVirtualLineForExpressionId(mapping.expressionId, virtualFile.content);
-    if (virtualLine === null) return null;
-
-    console.log('Simple mapping found:', mapping);
-    console.log('Virtual line for expression:', virtualLine);
-
-    // Calculate which character in the expression we're hovering on
-    const expressionStartInHtml = mapping.htmlPosition.character;
-    const hoverCharInHtml = params.position.character;
-    const charOffsetInExpression = hoverCharInHtml - expressionStartInHtml;
-
-    console.log(`Hover at HTML char ${hoverCharInHtml}, expression starts at ${expressionStartInHtml}, offset: ${charOffsetInExpression}`);
-
-    // Get TypeScript hover for the specific character position
-    const tsHover = virtualTsService.getHoverForVirtualLineAtChar(
-      virtualFile.uri,
-      virtualLine,
-      mapping.expression,
-      charOffsetInExpression
+    // Find the mapping for this HTML position
+    const mapping = transformation.mappings.find((m: AlpineMapping) =>
+      m.htmlExpressionStart.line === params.position.line &&
+      params.position.character >= m.htmlExpressionStart.character &&
+      params.position.character <= m.htmlExpressionEnd.character
     );
-    if (!tsHover) return null;
+
+    if (!mapping) {
+      connection.console.log('❌ No mapping found for position');
+      return null;
+    }
+
+    connection.console.log(`🎯 Found mapping: ${mapping.expressionId} -> "${mapping.expression}"`);
+
+    // Create a temporary TypeScript file with our generated content
+    const tempFileUri = document.uri + '.alpine.ts';
+
+    // Update TypeScript service with our generated content
+    virtualTsService.updateFileContent(tempFileUri, transformation.tsContent);
+
+    // Find the expression in the generated TypeScript
+    const expressionStartMarker = `"${mapping.expressionId}_START";`;
+    const lines = transformation.tsContent.split('\n');
+    let expressionLineIndex = -1;
+
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes(expressionStartMarker)) {
+        // The actual expression is on the next line or nearby
+        for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+          const line = lines[j];
+          if (line.trim() && !line.includes('_START') && !line.includes('_END') && !line.includes('//')) {
+            expressionLineIndex = j;
+            break;
+          }
+        }
+        break;
+      }
+    }
+
+    if (expressionLineIndex === -1) {
+      connection.console.log('❌ Could not find expression in generated TypeScript');
+      return null;
+    }
+
+    connection.console.log(`📍 Found expression at line ${expressionLineIndex}: "${lines[expressionLineIndex].trim()}"`);
+
+    // Calculate the character offset within the expression
+    const htmlCharOffset = params.position.character - mapping.htmlExpressionStart.character;
+    const expressionLine = lines[expressionLineIndex];
+    const expressionContent = expressionLine.trim();
+
+    // Find where the actual expression starts in the line (after indentation)
+    const expressionStartInLine = expressionLine.indexOf(expressionContent);
+    const tsPosition = expressionStartInLine + htmlCharOffset;
+
+    // Get TypeScript hover information
+    const tsHover = virtualTsService.getQuickInfoAtPosition(
+      tempFileUri,
+      expressionLineIndex,
+      tsPosition
+    );
+
+    if (!tsHover) {
+      connection.console.log('❌ No TypeScript hover info available');
+      return null;
+    }
+
+    connection.console.log(`✅ TypeScript hover: ${tsHover}`);
 
     return {
       contents: {
         kind: MarkupKind.Markdown,
         value: `\`\`\`typescript\n${tsHover}\n\`\`\``
+      },
+      range: {
+        start: { line: mapping.htmlExpressionStart.line, character: mapping.htmlExpressionStart.character },
+        end: { line: mapping.htmlExpressionEnd.line, character: mapping.htmlExpressionEnd.character }
       }
     };
+
   } catch (error) {
-    console.error('Hover error:', error);
+    connection.console.error('❌ Hover error: ' + String(error));
     return null;
   }
 /*

@@ -65,7 +65,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p . && npm run build-client && npm run build-server",
     "build-client": "esbuild src/client/extension.ts --bundle --outfile=out/client/extension.js --external:vscode --format=cjs --platform=node",
-    "build-server": "esbuild src/server/server.ts --bundle --outfile=out/server/server.js --format=cjs --platform=node --external:vscode-html-languageservice --external:vscode-css-languageservice",
+    "build-server": "esbuild src/server/server.ts --bundle --outfile=out/server/server.js --format=cjs --platform=node --external:vscode-html-languageservice --external:vscode-css-languageservice --external:jsdom",
     "watch": "tsc -watch -p ."
   },
   "dependencies": {

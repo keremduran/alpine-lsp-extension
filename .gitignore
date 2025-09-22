@@ -1,2 +1,14 @@
-node_modules
-supporting_documents
+node_modules/
+supporting_documents/
+out/
+.vscode-test/
+*.vsix
+test-*.html
+test-*.js
+*-output.ts
+*-optimized.ts
+comprehensive-*.ts
+mixed-*.ts
+xfor-*.ts
+final-*.ts
+.DS_Store
