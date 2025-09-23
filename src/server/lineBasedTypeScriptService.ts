@@ -284,6 +284,7 @@ export class LineBasedTypeScriptService {
     return undefined;
   }
 
+
   /**
    * Get hover for a specific character within an expression on a virtual line
    */

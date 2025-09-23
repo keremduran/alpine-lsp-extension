@@ -225,12 +225,25 @@ connection.onHover((params: HoverParams): Hover | null => {
     // Use our new transformation system
     const transformation = transformHtmlToTypeScript(document.getText());
 
-    // Find the mapping for this HTML position
-    const mapping = transformation.mappings.find((m: AlpineMapping) =>
-      m.htmlExpressionStart.line === params.position.line &&
-      params.position.character >= m.htmlExpressionStart.character &&
-      params.position.character <= m.htmlExpressionEnd.character
-    );
+    // Find the mapping for this HTML position (handles multi-line expressions)
+    const mapping = transformation.mappings.find((m: AlpineMapping) => {
+      const posLine = params.position.line;
+      const posChar = params.position.character;
+      const startLine = m.htmlExpressionStart.line;
+      const endLine = m.htmlExpressionEnd.line;
+
+      if (startLine === endLine) {
+        // Single-line expression
+        return posLine === startLine &&
+               posChar >= m.htmlExpressionStart.character &&
+               posChar <= m.htmlExpressionEnd.character;
+      } else {
+        // Multi-line expression
+        return (posLine === startLine && posChar >= m.htmlExpressionStart.character) || // On start line after start
+               (posLine > startLine && posLine < endLine) || // On middle line
+               (posLine === endLine && posChar <= m.htmlExpressionEnd.character); // On end line before end
+      }
+    });
 
     if (!mapping) {
       console.log(`❌ NO MAPPING FOUND`);
@@ -282,26 +295,58 @@ connection.onHover((params: HoverParams): Hover | null => {
     }
 
 
-    // Calculate the character offset within the expression
-    const htmlCharOffset = params.position.character - mapping.htmlExpressionStart.character;
+    // Calculate offset within the expression using absolute positions
+    // Convert hover position to absolute offset
+    const hoverOffset = document.offsetAt(params.position);
+
+    // Convert expression start to absolute offset
+    const expressionStartOffset = document.offsetAt({
+      line: mapping.htmlExpressionStart.line,
+      character: mapping.htmlExpressionStart.character
+    });
+
+    // How far into the expression are we?
+    const offsetInExpression = hoverOffset - expressionStartOffset;
+
+    // Find where the expression starts in the TypeScript file
     const expressionLine = lines[expressionLineIndex];
     const expressionContent = expressionLine.trim();
-
-    // Find where the actual expression starts in the line (after indentation)
     const expressionStartInLine = expressionLine.indexOf(expressionContent);
-    const tsPosition = expressionStartInLine + htmlCharOffset;
+
+    // Calculate absolute offset in TypeScript file
+    let tsOffset = 0;
+    for (let i = 0; i < expressionLineIndex; i++) {
+      tsOffset += lines[i].length + 1; // +1 for newline
+    }
+    tsOffset += expressionStartInLine + offsetInExpression;
 
     console.log(`🔍 TYPESCRIPT QUERY:`);
     console.log(`  TS file: ${tempFileUri}`);
-    console.log(`  TS line ${expressionLineIndex}: "${expressionLine}"`);
-    console.log(`  TS character: ${tsPosition}`);
-    console.log(`  Char at position: "${expressionLine[tsPosition] || 'EOF'}"`);
+    console.log(`  TS absolute offset: ${tsOffset}`);
+    console.log(`  Offset within expression: ${offsetInExpression}`);
 
-    // Get TypeScript hover information
+    // Convert absolute offset back to line/character for TypeScript API
+    let currentOffset = 0;
+    let targetLine = 0;
+    let targetChar = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const lineLength = lines[i].length;
+      if (currentOffset + lineLength >= tsOffset) {
+        targetLine = i;
+        targetChar = tsOffset - currentOffset;
+        break;
+      }
+      currentOffset += lineLength + 1; // +1 for newline
+    }
+
+    console.log(`  TS position: line ${targetLine}, char ${targetChar}`);
+    console.log(`  Line content: "${lines[targetLine]}"`);
+
+    // Get TypeScript hover information using line/character
     const tsHover = virtualTsService.getQuickInfoAtPosition(
       tempFileUri,
-      expressionLineIndex,
-      tsPosition
+      targetLine,
+      targetChar
     );
 
     if (!tsHover) {
