@@ -94,12 +94,24 @@ function findAlpineDirectives(html) {
 
   // Walk the parse5 AST and find Alpine directives
   function walkNode(node, loopContext = []) {
+    // Debug: Log elements being visited (condensed)
+    if (node.tagName && node.sourceCodeLocation) {
+      const alpineAttrs = node.attrs?.filter(attr => alpineAttributeRegex().test(attr.name) || attr.name.startsWith('@') || attr.name.startsWith(':')) || [];
+      if (alpineAttrs.length > 0) {
+        console.log(`🚶 <${node.tagName}> line ${node.sourceCodeLocation.startLine}: ${alpineAttrs.map(a => `${a.name}="${a.value}"`).join(', ')}`);
+      }
+    }
+
     // Check if this element has x-for to update loop context
     let currentLoopContext = [...loopContext];
 
     if (node.tagName && node.attrs && node.sourceCodeLocation) {
       const forAttr = node.attrs.find(attr => attr.name === 'x-for');
       if (forAttr) {
+        const lineNum = node.sourceCodeLocation?.startLine || 0;
+        console.log(`🔄 Found x-for="${forAttr.value}" on line ${lineNum}`);
+        console.log(`    Inherited context: [${loopContext.map(c => `${c.item} of ${c.items}`).join(', ')}]`);
+
         const parsed = parseForExpression(forAttr.value);
         if (parsed) {
           currentLoopContext.push({
@@ -107,6 +119,9 @@ function findAlpineDirectives(html) {
             items: parsed.items,
             index: parsed.index
           });
+          console.log(`    New context: [${currentLoopContext.map(c => `${c.item} of ${c.items}`).join(', ')}]`);
+        } else {
+          console.log(`    ❌ Failed to parse x-for expression`);
         }
       }
 
@@ -114,6 +129,11 @@ function findAlpineDirectives(html) {
       node.attrs.forEach(attr => {
         const attrName = attr.name;
         const attrValue = attr.value;
+
+        // Debug: Log directive processing
+        if (alpineAttributeRegex().test(attrName) || attrName.startsWith('@') || attrName.startsWith(':')) {
+          console.log(`🧭 ${attrName}="${attrValue}" → context: [${currentLoopContext.map(c => `${c.item} of ${c.items}`).join(', ')}]`);
+        }
 
         // Check if it's an Alpine directive
         if (alpineAttributeRegex().test(attrName) || attrName.startsWith('@') || attrName.startsWith(':')) {
@@ -169,24 +189,17 @@ function findAlpineDirectives(html) {
       });
     }
 
-    // Handle template content specially
-    if (node.tagName === 'template' && node.content && node.content.childNodes) {
-      // Template content doesn't have sourceCodeLocation, so we need to parse it differently
-      // For now, fall back to the old regex approach for template content
-      if (node.sourceCodeLocation) {
-        const templateStart = node.sourceCodeLocation.startTag.endOffset;
-        const templateEnd = node.sourceCodeLocation.endTag.startOffset;
-        const templateHtml = html.substring(templateStart, templateEnd);
-
-        // Use regex to find Alpine directives within template content
-        const templateDirectives = findDirectivesInTemplateContent(templateHtml, templateStart, currentLoopContext, html);
-        directives.push(...templateDirectives);
-      }
-    }
+    // Template content is now handled by DOM walker below - no regex fallback needed
 
     // Recursively process child nodes
     if (node.childNodes) {
       node.childNodes.forEach(child => walkNode(child, currentLoopContext));
+    }
+
+    // Special handling for <template> elements - their content is in node.content, not childNodes
+    if (node.tagName === 'template' && node.content && node.content.childNodes) {
+      console.log(`🌟 Processing <template> content on line ${node.sourceCodeLocation?.startLine}`);
+      node.content.childNodes.forEach(child => walkNode(child, currentLoopContext));
     }
   }
 
@@ -332,6 +345,9 @@ function transformHtmlToTypeScript(htmlContent) {
       }
     }
 
+    // Debug: Log context assignment (condensed)
+    console.log(`🔨 ${fullContextKey} ← "${directive.value}" (line ${directive.htmlStart.line})`);
+
     const contextKey = fullContextKey;
 
     if (!contextGroups.has(contextKey)) {
@@ -366,15 +382,52 @@ function transformHtmlToTypeScript(htmlContent) {
       lines.push(`  let { ${groupDataProperties.join(', ')} } = data;`);
     }
 
-    // Add loop contexts (nested loops) - once per group
-    if (firstDirective.loopContext && firstDirective.loopContext.length > 0) {
-      for (const loop of firstDirective.loopContext) {
-        // Convert Alpine's "in" to TypeScript's "of" with index support
-        if (loop.index) {
-          lines.push(`  ${loop.items}.forEach((${loop.item}, ${loop.index}) => {`);
-        } else {
-          lines.push(`  for (const ${loop.item} of ${loop.items}) {`);
+    // Parse nested loops from context name (e.g., "user_of_users__task_of_user_tasks")
+    function parseContextLoops(contextKey) {
+      const loops = [];
+      // Remove the "xdata1_" prefix and split on "__"
+      const contextPart = contextKey.replace(/^xdata\d+_/, '');
+      if (contextPart === 'global') return loops;
+
+      const levels = contextPart.split('__');
+
+      for (const level of levels) {
+        // Parse "user_of_users" or "task_of_user_tasks" or "user_userIndex_of_users"
+        const match = level.match(/^(.+)_of_(.+)$/);
+        if (match) {
+          const itemPart = match[1];
+          const itemsPart = match[2];
+
+          // Check if there's an index (e.g., "user_userIndex")
+          const itemMatch = itemPart.match(/^(.+)_(.+)$/);
+          if (itemMatch && itemMatch[2].includes('Index')) {
+            // Has index: "user_userIndex" -> item="user", index="userIndex"
+            loops.push({
+              item: itemMatch[1],
+              index: itemMatch[2],
+              items: itemsPart.replace(/_/g, '.')
+            });
+          } else {
+            // No index: "task" -> item="task"
+            loops.push({
+              item: itemPart,
+              items: itemsPart.replace(/_/g, '.')
+            });
+          }
         }
+      }
+
+      return loops;
+    }
+
+    // Add loop contexts (nested loops) - parse from context name
+    const allLoops = parseContextLoops(contextKey);
+    for (const loop of allLoops) {
+      // Convert to TypeScript for-loops
+      if (loop.index) {
+        lines.push(`  ${loop.items}.forEach((${loop.item}, ${loop.index}) => {`);
+      } else {
+        lines.push(`  for (const ${loop.item} of ${loop.items}) {`);
       }
     }
 
@@ -386,7 +439,7 @@ function transformHtmlToTypeScript(htmlContent) {
       const originalColumn = directive.htmlStart.character;
 
       // Add metadata as string literals (won't cause syntax errors)
-      const indent = '  ' + '  '.repeat(firstDirective.loopContext ? firstDirective.loopContext.length : 0);
+      const indent = '  ' + '  '.repeat(allLoops.length);
       lines.push(`${indent}"${expressionId}_START";`);
 
       // Create exact column padding to match HTML position
@@ -487,15 +540,13 @@ function transformHtmlToTypeScript(htmlContent) {
       }
     }
 
-    // Close loop contexts (once per group)
-    if (firstDirective.loopContext && firstDirective.loopContext.length > 0) {
-      for (let i = firstDirective.loopContext.length - 1; i >= 0; i--) {
-        const loop = firstDirective.loopContext[i];
-        if (loop.index) {
-          lines.push('  ' + '  '.repeat(i) + '});');
-        } else {
-          lines.push('  ' + '  '.repeat(i) + '}');
-        }
+    // Close loop contexts (once per group) - close in reverse order
+    for (let i = allLoops.length - 1; i >= 0; i--) {
+      const loop = allLoops[i];
+      if (loop.index) {
+        lines.push('  ' + '  '.repeat(i) + '});');
+      } else {
+        lines.push('  ' + '  '.repeat(i) + '}');
       }
     }
 

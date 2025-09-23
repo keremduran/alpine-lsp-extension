@@ -17239,10 +17239,19 @@ var require_transform_html_to_ts_alpine = __commonJS({
       const document = parse(html, { sourceCodeLocationInfo: true });
       const directives = [];
       function walkNode(node, loopContext = []) {
+        if (node.tagName && node.sourceCodeLocation) {
+          const alpineAttrs = node.attrs?.filter((attr) => alpineAttributeRegex().test(attr.name) || attr.name.startsWith("@") || attr.name.startsWith(":")) || [];
+          if (alpineAttrs.length > 0) {
+            console.log(`\u{1F6B6} <${node.tagName}> line ${node.sourceCodeLocation.startLine}: ${alpineAttrs.map((a) => `${a.name}="${a.value}"`).join(", ")}`);
+          }
+        }
         let currentLoopContext = [...loopContext];
         if (node.tagName && node.attrs && node.sourceCodeLocation) {
           const forAttr = node.attrs.find((attr) => attr.name === "x-for");
           if (forAttr) {
+            const lineNum = node.sourceCodeLocation?.startLine || 0;
+            console.log(`\u{1F504} Found x-for="${forAttr.value}" on line ${lineNum}`);
+            console.log(`    Inherited context: [${loopContext.map((c) => `${c.item} of ${c.items}`).join(", ")}]`);
             const parsed = parseForExpression(forAttr.value);
             if (parsed) {
               currentLoopContext.push({
@@ -17250,11 +17259,17 @@ var require_transform_html_to_ts_alpine = __commonJS({
                 items: parsed.items,
                 index: parsed.index
               });
+              console.log(`    New context: [${currentLoopContext.map((c) => `${c.item} of ${c.items}`).join(", ")}]`);
+            } else {
+              console.log(`    \u274C Failed to parse x-for expression`);
             }
           }
           node.attrs.forEach((attr) => {
             const attrName = attr.name;
             const attrValue = attr.value;
+            if (alpineAttributeRegex().test(attrName) || attrName.startsWith("@") || attrName.startsWith(":")) {
+              console.log(`\u{1F9ED} ${attrName}="${attrValue}" \u2192 context: [${currentLoopContext.map((c) => `${c.item} of ${c.items}`).join(", ")}]`);
+            }
             if (alpineAttributeRegex().test(attrName) || attrName.startsWith("@") || attrName.startsWith(":")) {
               let transformedName = attrName;
               if (attrName.startsWith("@")) {
@@ -17295,17 +17310,12 @@ var require_transform_html_to_ts_alpine = __commonJS({
             }
           });
         }
-        if (node.tagName === "template" && node.content && node.content.childNodes) {
-          if (node.sourceCodeLocation) {
-            const templateStart = node.sourceCodeLocation.startTag.endOffset;
-            const templateEnd = node.sourceCodeLocation.endTag.startOffset;
-            const templateHtml = html.substring(templateStart, templateEnd);
-            const templateDirectives = findDirectivesInTemplateContent(templateHtml, templateStart, currentLoopContext, html);
-            directives.push(...templateDirectives);
-          }
-        }
         if (node.childNodes) {
           node.childNodes.forEach((child) => walkNode(child, currentLoopContext));
+        }
+        if (node.tagName === "template" && node.content && node.content.childNodes) {
+          console.log(`\u{1F31F} Processing <template> content on line ${node.sourceCodeLocation?.startLine}`);
+          node.content.childNodes.forEach((child) => walkNode(child, currentLoopContext));
         }
       }
       walkNode(document);
@@ -17410,6 +17420,7 @@ var require_transform_html_to_ts_alpine = __commonJS({
             fullContextKey += `__${forSignature}_of_${parsed.items.replace(/[^a-zA-Z0-9_]/g, "_")}`;
           }
         }
+        console.log(`\u{1F528} ${fullContextKey} \u2190 "${directive.value}" (line ${directive.htmlStart.line})`);
         const contextKey = fullContextKey;
         if (!contextGroups.has(contextKey)) {
           contextGroups.set(contextKey, []);
@@ -17417,6 +17428,34 @@ var require_transform_html_to_ts_alpine = __commonJS({
         contextGroups.get(contextKey).push(directive);
       }
       for (const [contextKey, groupDirectives] of contextGroups) {
+        let parseContextLoops2 = function(contextKey2) {
+          const loops = [];
+          const contextPart = contextKey2.replace(/^xdata\d+_/, "");
+          if (contextPart === "global") return loops;
+          const levels = contextPart.split("__");
+          for (const level of levels) {
+            const match = level.match(/^(.+)_of_(.+)$/);
+            if (match) {
+              const itemPart = match[1];
+              const itemsPart = match[2];
+              const itemMatch = itemPart.match(/^(.+)_(.+)$/);
+              if (itemMatch && itemMatch[2].includes("Index")) {
+                loops.push({
+                  item: itemMatch[1],
+                  index: itemMatch[2],
+                  items: itemsPart.replace(/_/g, ".")
+                });
+              } else {
+                loops.push({
+                  item: itemPart,
+                  items: itemsPart.replace(/_/g, ".")
+                });
+              }
+            }
+          }
+          return loops;
+        };
+        var parseContextLoops = parseContextLoops2;
         const functionName = `${contextKey}Expressions`;
         const firstDirective = groupDirectives[0];
         const xDataDirective = directives.find((d) => d.type === "data" && d.xDataIndex === firstDirective.xDataIndex);
@@ -17432,19 +17471,18 @@ var require_transform_html_to_ts_alpine = __commonJS({
         if (groupDataProperties.length > 0) {
           lines.push(`  let { ${groupDataProperties.join(", ")} } = data;`);
         }
-        if (firstDirective.loopContext && firstDirective.loopContext.length > 0) {
-          for (const loop of firstDirective.loopContext) {
-            if (loop.index) {
-              lines.push(`  ${loop.items}.forEach((${loop.item}, ${loop.index}) => {`);
-            } else {
-              lines.push(`  for (const ${loop.item} of ${loop.items}) {`);
-            }
+        const allLoops = parseContextLoops2(contextKey);
+        for (const loop of allLoops) {
+          if (loop.index) {
+            lines.push(`  ${loop.items}.forEach((${loop.item}, ${loop.index}) => {`);
+          } else {
+            lines.push(`  for (const ${loop.item} of ${loop.items}) {`);
           }
         }
         for (const directive of groupDirectives) {
           const expressionId = `expr_${directive.htmlStart.line}_${directive.htmlStart.character}`;
           const originalColumn = directive.htmlStart.character;
-          const indent = "  " + "  ".repeat(firstDirective.loopContext ? firstDirective.loopContext.length : 0);
+          const indent = "  " + "  ".repeat(allLoops.length);
           lines.push(`${indent}"${expressionId}_START";`);
           const padding = " ".repeat(originalColumn);
           if (directive.type === "for") {
@@ -17525,14 +17563,12 @@ var require_transform_html_to_ts_alpine = __commonJS({
             });
           }
         }
-        if (firstDirective.loopContext && firstDirective.loopContext.length > 0) {
-          for (let i = firstDirective.loopContext.length - 1; i >= 0; i--) {
-            const loop = firstDirective.loopContext[i];
-            if (loop.index) {
-              lines.push("  " + "  ".repeat(i) + "});");
-            } else {
-              lines.push("  " + "  ".repeat(i) + "}");
-            }
+        for (let i = allLoops.length - 1; i >= 0; i--) {
+          const loop = allLoops[i];
+          if (loop.index) {
+            lines.push("  " + "  ".repeat(i) + "});");
+          } else {
+            lines.push("  " + "  ".repeat(i) + "}");
           }
         }
         lines.push(`}`);
@@ -18564,6 +18600,23 @@ ${documentation}` : ""}`;
     }
     return void 0;
   }
+  /**
+   * Get TypeScript diagnostics for a file
+   */
+  getDiagnostics(uri) {
+    if (!this.realFiles.has(uri)) {
+      return [];
+    }
+    const realFilePath = this.realFiles.get(uri);
+    try {
+      const syntacticDiagnostics = this.languageService.getSyntacticDiagnostics(realFilePath);
+      const semanticDiagnostics = this.languageService.getSemanticDiagnostics(realFilePath);
+      return [...syntacticDiagnostics, ...semanticDiagnostics];
+    } catch (error) {
+      console.error("Error getting diagnostics:", error);
+      return [];
+    }
+  }
 };
 
 // src/server/server.ts
@@ -18765,17 +18818,45 @@ connection.onHover((params) => {
       targetLine,
       targetChar
     );
+    const tsDiagnostics = virtualTsService.getDiagnostics(tempFileUri);
+    console.log(`\u{1F50D} CHECKING DIAGNOSTICS (${tsDiagnostics.length} total)`);
+    const relevantDiagnostics = tsDiagnostics.filter((diag) => {
+      if (!diag.start || !diag.length) return false;
+      const diagStart = diag.start;
+      const diagEnd = diag.start + diag.length;
+      const currentOffset2 = tsOffset;
+      const overlaps = currentOffset2 >= diagStart && currentOffset2 <= diagEnd;
+      if (overlaps) {
+        console.log(`  \u274C ERROR at position ${diagStart}-${diagEnd}: ${diag.messageText}`);
+      }
+      return overlaps;
+    });
     if (!tsHover) {
       console.log(`\u274C NO TYPESCRIPT HOVER INFO`);
       return null;
     }
     console.log(`\u2705 TYPESCRIPT RESULT: ${tsHover}`);
+    let hoverContent = `\`\`\`typescript
+${tsHover}
+\`\`\``;
+    if (relevantDiagnostics.length > 0) {
+      const errorMessages = relevantDiagnostics.map((diag) => {
+        const message = typeof diag.messageText === "string" ? diag.messageText : diag.messageText.messageText;
+        return message;
+      }).join("\n\n");
+      hoverContent += `
+
+---
+
+\u26A0\uFE0F **Error**
+
+${errorMessages}`;
+      console.log(`\u{1F4CB} ADDED ${relevantDiagnostics.length} ERROR(S) TO HOVER`);
+    }
     return {
       contents: {
         kind: import_node.MarkupKind.Markdown,
-        value: `\`\`\`typescript
-${tsHover}
-\`\`\``
+        value: hoverContent
       },
       range: {
         start: { line: mapping.htmlExpressionStart.line, character: mapping.htmlExpressionStart.character },

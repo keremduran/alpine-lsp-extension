@@ -349,6 +349,29 @@ connection.onHover((params: HoverParams): Hover | null => {
       targetChar
     );
 
+    // Get TypeScript diagnostics to check for errors at this position
+    const tsDiagnostics = virtualTsService.getDiagnostics(tempFileUri);
+
+    console.log(`🔍 CHECKING DIAGNOSTICS (${tsDiagnostics.length} total)`);
+
+    // Filter diagnostics that affect the current position (within the expression)
+    const relevantDiagnostics = tsDiagnostics.filter((diag: any) => {
+      if (!diag.start || !diag.length) return false;
+
+      const diagStart = diag.start;
+      const diagEnd = diag.start + diag.length;
+      const currentOffset = tsOffset;
+
+      // Check if our hover position overlaps with this diagnostic
+      const overlaps = currentOffset >= diagStart && currentOffset <= diagEnd;
+
+      if (overlaps) {
+        console.log(`  ❌ ERROR at position ${diagStart}-${diagEnd}: ${diag.messageText}`);
+      }
+
+      return overlaps;
+    });
+
     if (!tsHover) {
       console.log(`❌ NO TYPESCRIPT HOVER INFO`);
       return null;
@@ -356,10 +379,25 @@ connection.onHover((params: HoverParams): Hover | null => {
 
     console.log(`✅ TYPESCRIPT RESULT: ${tsHover}`);
 
+    // Build hover content with errors if any
+    let hoverContent = `\`\`\`typescript\n${tsHover}\n\`\`\``;
+
+    if (relevantDiagnostics.length > 0) {
+      const errorMessages = relevantDiagnostics.map((diag: any) => {
+        const message = typeof diag.messageText === 'string'
+          ? diag.messageText
+          : diag.messageText.messageText;
+        return message;
+      }).join('\n\n');
+
+      hoverContent += `\n\n---\n\n⚠️ **Error**\n\n${errorMessages}`;
+      console.log(`📋 ADDED ${relevantDiagnostics.length} ERROR(S) TO HOVER`);
+    }
+
     return {
       contents: {
         kind: MarkupKind.Markdown,
-        value: `\`\`\`typescript\n${tsHover}\n\`\`\``
+        value: hoverContent
       },
       range: {
         start: { line: mapping.htmlExpressionStart.line, character: mapping.htmlExpressionStart.character },

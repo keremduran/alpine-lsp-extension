@@ -362,6 +362,24 @@ class LineBasedTypeScriptService {
         }
         return undefined;
     }
+    /**
+     * Get TypeScript diagnostics for a file
+     */
+    getDiagnostics(uri) {
+        if (!this.realFiles.has(uri)) {
+            return [];
+        }
+        const realFilePath = this.realFiles.get(uri);
+        try {
+            const syntacticDiagnostics = this.languageService.getSyntacticDiagnostics(realFilePath);
+            const semanticDiagnostics = this.languageService.getSemanticDiagnostics(realFilePath);
+            return [...syntacticDiagnostics, ...semanticDiagnostics];
+        }
+        catch (error) {
+            console.error('Error getting diagnostics:', error);
+            return [];
+        }
+    }
 }
 exports.LineBasedTypeScriptService = LineBasedTypeScriptService;
 //# sourceMappingURL=lineBasedTypeScriptService.js.map
