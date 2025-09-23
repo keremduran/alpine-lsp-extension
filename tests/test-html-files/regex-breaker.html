@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Regex Breaker Test</title>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+    <!-- Test 1: Nested quotes and escaped quotes -->
+    <div x-data="{ message: 'Hello \"world\" with \\'quotes\\'' }">
+        <span x-text="message"></span>
+    </div>
+
+    <!-- Test 2: Similar expressions with different contexts -->
+    <div x-data="{ user: { name: 'John' }, users: [{ name: 'Jane' }] }">
+        <span x-text="user.name"></span>  <!-- Should map to line 13, char X -->
+        <span x-text="user.name"></span>  <!-- Should map to line 14, char X (duplicate) -->
+        <template x-for="user in users">
+            <span x-text="user.name"></span>  <!-- Should map to line 16, char X (different scope) -->
+        </template>
+    </div>
+
+    <!-- Test 3: Complex expressions with regex special characters -->
+    <div x-data="{ pattern: /[a-z]+/, items: ['$test', '^start', 'end$'] }">
+        <span x-text="pattern.test('hello')"></span>
+        <span x-text="items.filter(i => i.includes('$'))"></span>
+    </div>
+
+    <!-- Test 4: Multiline attributes and formatting -->
+    <div
+        x-data="{
+            complex: {
+                nested: 'value'
+            }
+        }"
+        x-show="complex.nested === 'value'"
+    >
+        <span x-text="complex.nested"></span>
+    </div>
+
+    <!-- Test 5: Identical expressions in comments vs real attributes -->
+    <!-- <div x-text="fake.expression"></div> -->
+    <div x-text="fake.expression"></div>
+
+    <!-- Test 6: String templates and backticks -->
+    <div x-data="{ name: 'World', template: `Hello ${name}!` }">
+        <span x-text="`Hello ${name}!`"></span>
+    </div>
+
+    <!-- Test 7: Mixed quote types -->
+    <div x-data='{ single: "double", double: "single" }'>
+        <span x-text='single'></span>
+        <span x-text="double"></span>
+    </div>
+
+    <!-- Test 8: Malformed/edge case HTML -->
+    <div x-data="{ broken: 'test' }"
+         x-text="broken"
+         class="test">
+        <span x-text="broken"></span>
+    </div>
+
+    <!-- Test 9: Very similar but different expressions -->
+    <div x-data="{ item: 'a', items: ['b'], itemCount: 3 }">
+        <span x-text="item"></span>      <!-- Should be distinct from items -->
+        <span x-text="items"></span>     <!-- Should be distinct from item -->
+        <span x-text="itemCount"></span> <!-- Should be distinct from both -->
+    </div>
+
+    <!-- Test 10: Expressions that could confuse regex matching -->
+    <div x-data="{ 'x-text': 'gotcha', attr: 'x-text=\"fake\"' }">
+        <span x-text="attr"></span>
+        <span x-bind:title="attr"></span>
+    </div>
+
+    <!-- Test 11: Deeply nested identical expressions -->
+    <div x-data="{ level1: { level2: { value: 'deep' } } }">
+        <div x-show="level1.level2.value === 'deep'">
+            <template x-for="item in ['a', 'b']">
+                <div x-show="level1.level2.value === 'deep'">  <!-- Same expression, different context -->
+                    <span x-text="level1.level2.value"></span>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Test 12: Edge case with HTML entities and special chars -->
+    <div x-data="{ entity: '&amp;', special: '&lt;script&gt;' }">
+        <span x-text="entity"></span>
+        <span x-text="special"></span>
+    </div>
+</body>
+</html>

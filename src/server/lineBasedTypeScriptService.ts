@@ -1,4 +1,7 @@
 import * as ts from 'typescript';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { LineBasedVirtualFile, LineMapping } from './lineBasedVirtualFile';
 import { SimpleVirtualFile, SimpleMapping } from './simpleVirtualFile';
 
@@ -6,27 +9,49 @@ export class LineBasedTypeScriptService {
   private languageService!: ts.LanguageService;
   private languageServiceHost!: ts.LanguageServiceHost;
   private virtualFiles = new Map<string, string>();
+  private realFiles = new Map<string, string>(); // Map virtual URI to real file path
   private currentMappings: LineMapping[] = [];
   private fileVersions = new Map<string, number>();
   private maxVersionHistory = 10; // Prevent memory leaks
+  private tempDir: string;
 
   constructor() {
+    // Create temp directory for real TypeScript files
+    this.tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alpine-lsp-'));
+    console.log(`Alpine LSP temp directory: ${this.tempDir}`);
     this.setupLanguageService();
   }
 
   private setupLanguageService() {
+    // Use EXACT same setup as working isolated test
     this.languageServiceHost = {
-      getScriptFileNames: () => Array.from(this.virtualFiles.keys()),
-      getScriptVersion: (fileName: string) => {
-        return (this.fileVersions.get(fileName) || 0).toString();
+      getScriptFileNames: () => {
+        const fileNames = Array.from(this.realFiles.values());
+        return fileNames;
       },
-      getScriptSnapshot: (fileName: string) => {
-        const content = this.virtualFiles.get(fileName);
-        return content ? ts.ScriptSnapshot.fromString(content) : undefined;
+      getScriptVersion: (fileName: string) => {
+        // Find URI from real file path
+        for (const [uri, realPath] of this.realFiles.entries()) {
+          if (realPath === fileName) {
+            return (this.fileVersions.get(uri) || 1).toString();
+          }
+        }
+        return '1';
+      },
+      getScriptSnapshot: (fileName) => {
+        if (fs.existsSync(fileName)) {
+          const content = fs.readFileSync(fileName, 'utf8');
+          return ts.ScriptSnapshot.fromString(content);
+        }
+        return undefined;
       },
       getCurrentDirectory: () => process.cwd(),
-      getCompilationSettings: () => ts.getDefaultCompilerOptions(),
-      getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+      getCompilationSettings: () => ({
+        target: ts.ScriptTarget.ES2020,
+        strict: true,
+        // MINIMAL SETTINGS ONLY - like working test
+      }),
+      getDefaultLibFileName: ts.getDefaultLibFilePath,
       fileExists: ts.sys.fileExists,
       readFile: ts.sys.readFile,
       readDirectory: ts.sys.readDirectory,
@@ -45,7 +70,19 @@ export class LineBasedTypeScriptService {
     console.log('Content length:', virtualFile.content.length);
     console.log('Mappings count:', virtualFile.mappings.length);
 
+    // Keep virtual content for reference
     this.virtualFiles.set(virtualFile.uri, virtualFile.content);
+
+    // Create real file with .ts extension
+    const baseNameFromUri = path.basename(virtualFile.uri.replace('file://', ''))
+      .replace('.html.alpine.ts', '')
+      .replace('.htm.alpine.ts', '');
+    const realFilePath = path.join(this.tempDir, `${baseNameFromUri}.ts`);
+
+    // Write to real file
+    fs.writeFileSync(realFilePath, virtualFile.content);
+    this.realFiles.set(virtualFile.uri, realFilePath);
+
     // Convert SimpleMapping to LineMapping if needed for compatibility
     this.currentMappings = virtualFile.mappings.map(m => {
       if ('virtualLine' in m) {
@@ -319,6 +356,17 @@ export class LineBasedTypeScriptService {
     console.log(`Updating file content for ${uri}, length: ${content.length}`);
     this.virtualFiles.set(uri, content);
 
+    // Create real file with .ts extension
+    const baseNameFromUri = path.basename(uri.replace('file://', ''))
+      .replace('.html.alpine.ts', '')
+      .replace('.htm.alpine.ts', '');
+    const realFilePath = path.join(this.tempDir, `${baseNameFromUri}.ts`);
+
+    // Write to real file
+    fs.writeFileSync(realFilePath, content);
+    this.realFiles.set(uri, realFilePath);
+
+
     // Increment version to force TypeScript cache invalidation
     const currentVersion = this.fileVersions.get(uri) || 0;
     const newVersion = currentVersion + 1;
@@ -334,24 +382,18 @@ export class LineBasedTypeScriptService {
    * Get quick info at a specific position in a file
    */
   getQuickInfoAtPosition(uri: string, line: number, character: number): string | undefined {
-    console.log(`Getting quick info at ${uri}:${line}:${character}`);
-
-    if (!this.virtualFiles.has(uri)) {
-      console.log('File not found:', uri);
+    if (!this.realFiles.has(uri)) {
       return undefined;
     }
 
-    const content = this.virtualFiles.get(uri)!;
+    const realFilePath = this.realFiles.get(uri)!;
+    const content = fs.readFileSync(realFilePath, 'utf8');
     const absolutePosition = this.getPositionFromLineAndCharacter(content, line, character);
 
-    console.log(`Absolute position: ${absolutePosition}`);
-
     try {
-      const quickInfo = this.languageService.getQuickInfoAtPosition(uri, absolutePosition);
+      const quickInfo = this.languageService.getQuickInfoAtPosition(realFilePath, absolutePosition);
       if (quickInfo && quickInfo.displayParts) {
-        const text = quickInfo.displayParts.map(part => part.text).join('');
-        console.log(`Quick info: ${text}`);
-        return text;
+        return quickInfo.displayParts.map(part => part.text).join('');
       }
     } catch (error) {
       console.error('Error getting quick info:', error);

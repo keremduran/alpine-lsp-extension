@@ -211,17 +211,19 @@ connection.onHover((params: HoverParams): Hover | null => {
   if (!document) return null;
 
   try {
-    connection.console.log('🎯 Hover requested at: ' + JSON.stringify(params.position));
+    // Get the HTML line content to see what we're actually hovering on
+    const htmlLines = document.getText().split('\n');
+    const hoverLine = htmlLines[params.position.line] || '';
+    const hoverChar = hoverLine[params.position.character] || '';
+
+    console.log(`🎯 HOVER DEBUG:`);
+    console.log(`  HTML line ${params.position.line}, char ${params.position.character}`);
+    console.log(`  Line content: "${hoverLine}"`);
+    console.log(`  Character at position: "${hoverChar}"`);
+    console.log(`  Context: "${hoverLine.substring(Math.max(0, params.position.character - 10), params.position.character + 10)}"`);
 
     // Use our new transformation system
     const transformation = transformHtmlToTypeScript(document.getText());
-    connection.console.log(`✅ Generated ${transformation.mappings.length} mappings`);
-
-    // Log the generated TypeScript content
-    connection.console.log('📄 Generated TypeScript:');
-    connection.console.log('=====================================');
-    connection.console.log(transformation.tsContent);
-    connection.console.log('=====================================');
 
     // Find the mapping for this HTML position
     const mapping = transformation.mappings.find((m: AlpineMapping) =>
@@ -231,11 +233,23 @@ connection.onHover((params: HoverParams): Hover | null => {
     );
 
     if (!mapping) {
-      connection.console.log('❌ No mapping found for position');
+      console.log(`❌ NO MAPPING FOUND`);
+      console.log(`  Looking for expressions containing line ${params.position.line}, char ${params.position.character}`);
+      const lineMatches = transformation.mappings.filter(m => m.htmlExpressionStart.line === params.position.line);
+      if (lineMatches.length > 0) {
+        console.log(`  Found ${lineMatches.length} expressions on this line:`);
+        lineMatches.forEach(m => {
+          console.log(`    ${m.expressionId}: chars ${m.htmlExpressionStart.character}-${m.htmlExpressionEnd.character} = "${m.expression}"`);
+        });
+      } else {
+        console.log(`  No expressions found on line ${params.position.line}`);
+      }
       return null;
     }
 
-    connection.console.log(`🎯 Found mapping: ${mapping.expressionId} -> "${mapping.expression}"`);
+    console.log(`✅ FOUND MAPPING: ${mapping.expressionId}`);
+    console.log(`  Expression: "${mapping.expression}"`);
+    console.log(`  HTML range: line ${mapping.htmlExpressionStart.line}, chars ${mapping.htmlExpressionStart.character}-${mapping.htmlExpressionEnd.character}`);
 
     // Create a temporary TypeScript file with our generated content
     const tempFileUri = document.uri + '.alpine.ts';
@@ -267,7 +281,6 @@ connection.onHover((params: HoverParams): Hover | null => {
       return null;
     }
 
-    connection.console.log(`📍 Found expression at line ${expressionLineIndex}: "${lines[expressionLineIndex].trim()}"`);
 
     // Calculate the character offset within the expression
     const htmlCharOffset = params.position.character - mapping.htmlExpressionStart.character;
@@ -278,6 +291,12 @@ connection.onHover((params: HoverParams): Hover | null => {
     const expressionStartInLine = expressionLine.indexOf(expressionContent);
     const tsPosition = expressionStartInLine + htmlCharOffset;
 
+    console.log(`🔍 TYPESCRIPT QUERY:`);
+    console.log(`  TS file: ${tempFileUri}`);
+    console.log(`  TS line ${expressionLineIndex}: "${expressionLine}"`);
+    console.log(`  TS character: ${tsPosition}`);
+    console.log(`  Char at position: "${expressionLine[tsPosition] || 'EOF'}"`);
+
     // Get TypeScript hover information
     const tsHover = virtualTsService.getQuickInfoAtPosition(
       tempFileUri,
@@ -286,11 +305,11 @@ connection.onHover((params: HoverParams): Hover | null => {
     );
 
     if (!tsHover) {
-      connection.console.log('❌ No TypeScript hover info available');
+      console.log(`❌ NO TYPESCRIPT HOVER INFO`);
       return null;
     }
 
-    connection.console.log(`✅ TypeScript hover: ${tsHover}`);
+    console.log(`✅ TYPESCRIPT RESULT: ${tsHover}`);
 
     return {
       contents: {

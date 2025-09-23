@@ -1,7 +1,7 @@
 // Alpine.js-style HTML to TypeScript transformation
-// Uses DOM parsing and Alpine's exact directive parsing logic
+// Uses parse5 for precise source location mapping
 
-const { JSDOM } = require('jsdom');
+const { parse } = require('parse5');
 
 // Alpine.js constants and functions (copied exactly)
 var prefixAsString = "x-";
@@ -86,107 +86,157 @@ function parseForExpression(expression) {
   return res;
 }
 
-// Find Alpine directives using DOM parsing (exactly like Alpine.js)
+
+// Find Alpine directives using parse5 for precise source location mapping
 function findAlpineDirectives(html) {
-  const dom = new JSDOM(html);
-  const document = dom.window.document;
+  const document = parse(html, { sourceCodeLocationInfo: true });
   const directives = [];
 
-  // Track loop context as we walk the DOM
-  const loopStack = [];
-
-  // Walk the DOM like Alpine.js does
-  function walk(el, callback, loopContext = []) {
-    // Check if this element has x-for
+  // Walk the parse5 AST and find Alpine directives
+  function walkNode(node, loopContext = []) {
+    // Check if this element has x-for to update loop context
     let currentLoopContext = [...loopContext];
 
-    if (el.hasAttribute && el.hasAttribute('x-for')) {
-      const forExpression = el.getAttribute('x-for');
-      const parsed = parseForExpression(forExpression);
-      if (parsed) {
-        // Add this loop to the context for children
-        currentLoopContext.push({
-          item: parsed.item,
-          items: parsed.items,
-          index: parsed.index
-        });
-      }
-    }
-
-    callback(el, currentLoopContext);
-
-    // Handle template content specially
-    if (el.tagName && el.tagName.toLowerCase() === 'template' && el.content) {
-      // Process template content with the current loop context
-      const templateChildren = el.content.children;
-      for (let i = 0; i < templateChildren.length; i++) {
-        walk(templateChildren[i], callback, currentLoopContext);
-      }
-    }
-
-    let node = el.firstElementChild;
-    while (node) {
-      walk(node, callback, currentLoopContext);
-      node = node.nextElementSibling;
-    }
-  }
-
-  // Process each element like Alpine.js
-  walk(document.documentElement, (el, loopContext) => {
-    if (!el.attributes) return;
-
-    // Convert attributes to Alpine's format
-    const attributes = Array.from(el.attributes).map(attr => ({
-      name: attr.name,
-      value: attr.value
-    }));
-
-    // Apply Alpine's exact parsing logic
-    let transformedAttributeMap = {};
-    let alpineDirectives = attributes
-      .map(toTransformedAttributes((newName, oldName) => transformedAttributeMap[newName] = oldName))
-      .filter(outNonAlpineAttributes)
-      .map(toParsedDirectives(transformedAttributeMap));
-
-    // Convert to our format with accurate position info
-    alpineDirectives.forEach(directive => {
-      if (directive.type) {
-        // Find each attribute occurrence in HTML with unique identification
-        const attrName = directive.original;
-        const expression = directive.expression;
-
-        // Create a unique pattern for this specific attribute value
-        const escapedAttr = escapeRegex(attrName);
-        const escapedValue = escapeRegex(expression);
-        const attrRegex = new RegExp(`\\b${escapedAttr}\\s*=\\s*(['"])${escapedValue}\\1`, 'gs');
-
-        let match = attrRegex.exec(html);
-        if (match) {
-          // Find the exact position where the expression content starts
-          const fullMatch = match[0];
-          const quote = match[1];
-          const quoteIndex = fullMatch.indexOf(quote, fullMatch.indexOf('='));
-          const expressionStart = match.index + quoteIndex + 1;
-
-          const htmlStart = getPositionFromOffset(html, expressionStart);
-          const htmlEnd = getPositionFromOffset(html, expressionStart + expression.length);
-
-          directives.push({
-            type: directive.type,
-            value: expression,
-            htmlStart,
-            htmlEnd,
-            position: match.index,
-            modifiers: directive.modifiers,
-            directiveName: attrName,
-            loopContext: loopContext // x-for needs parent context to reference parent variables
+    if (node.tagName && node.attrs && node.sourceCodeLocation) {
+      const forAttr = node.attrs.find(attr => attr.name === 'x-for');
+      if (forAttr) {
+        const parsed = parseForExpression(forAttr.value);
+        if (parsed) {
+          currentLoopContext.push({
+            item: parsed.item,
+            items: parsed.items,
+            index: parsed.index
           });
         }
       }
-    });
-  });
 
+      // Process all Alpine attributes on this element
+      node.attrs.forEach(attr => {
+        const attrName = attr.name;
+        const attrValue = attr.value;
+
+        // Check if it's an Alpine directive
+        if (alpineAttributeRegex().test(attrName) || attrName.startsWith('@') || attrName.startsWith(':')) {
+          // Transform attribute name like Alpine.js does
+          let transformedName = attrName;
+          if (attrName.startsWith('@')) {
+            transformedName = attrName.replace('@', 'x-on:');
+          } else if (attrName.startsWith(':')) {
+            transformedName = attrName.replace(':', 'x-bind:');
+          }
+
+          // Parse the directive using Alpine's logic
+          const typeMatch = transformedName.match(alpineAttributeRegex());
+          const valueMatch = transformedName.match(/:([a-zA-Z0-9\-_:]+)/);
+          const modifiers = transformedName.match(/\.[^.\]]+(?=[^\]]*$)/g) || [];
+
+          if (typeMatch) {
+            // Get precise source location from parse5
+            const attrLocation = node.sourceCodeLocation.attrs[attrName];
+            if (attrLocation) {
+              // Calculate expression position (inside quotes)
+              // The attr location includes the entire attribute: x-text="expression"
+              // We need to find the start of the expression value
+              const attrText = html.substring(attrLocation.startOffset, attrLocation.endOffset);
+              const equalIndex = attrText.indexOf('=');
+              const quoteIndex = equalIndex + 1;
+
+              // Find the quote character and skip it
+              let quote = '';
+              for (let i = quoteIndex; i < attrText.length; i++) {
+                if (attrText[i] === '"' || attrText[i] === "'") {
+                  quote = attrText[i];
+                  break;
+                }
+              }
+
+              const expressionStart = attrLocation.startOffset + attrText.indexOf(quote) + 1;
+              const expressionEnd = expressionStart + attrValue.length;
+
+              directives.push({
+                type: typeMatch[1],
+                value: attrValue,
+                htmlStart: getPositionFromOffset(html, expressionStart),
+                htmlEnd: getPositionFromOffset(html, expressionEnd),
+                position: node.sourceCodeLocation.startOffset,
+                modifiers: modifiers.map(m => m.replace(".", "")),
+                directiveName: attrName,
+                loopContext: currentLoopContext
+              });
+            }
+          }
+        }
+      });
+    }
+
+    // Handle template content specially
+    if (node.tagName === 'template' && node.content && node.content.childNodes) {
+      // Template content doesn't have sourceCodeLocation, so we need to parse it differently
+      // For now, fall back to the old regex approach for template content
+      if (node.sourceCodeLocation) {
+        const templateStart = node.sourceCodeLocation.startTag.endOffset;
+        const templateEnd = node.sourceCodeLocation.endTag.startOffset;
+        const templateHtml = html.substring(templateStart, templateEnd);
+
+        // Use regex to find Alpine directives within template content
+        const templateDirectives = findDirectivesInTemplateContent(templateHtml, templateStart, currentLoopContext, html);
+        directives.push(...templateDirectives);
+      }
+    }
+
+    // Recursively process child nodes
+    if (node.childNodes) {
+      node.childNodes.forEach(child => walkNode(child, currentLoopContext));
+    }
+  }
+
+  walkNode(document);
   return directives.sort((a, b) => a.position - b.position);
+}
+
+// Helper function to find Alpine directives in template content using regex
+function findDirectivesInTemplateContent(templateHtml, startOffset, loopContext, html) {
+  const directives = [];
+
+  // Use regex to find all Alpine attributes in template content
+  const alpineAttrRegex = /\s(x-[\w-]+|[@:][\w-]+)\s*=\s*(['"])((?:\\.|(?!\2)[^\\])*?)\2/g;
+
+  let match;
+  while ((match = alpineAttrRegex.exec(templateHtml)) !== null) {
+    const attrName = match[1];
+    const quote = match[2];
+    const attrValue = match[3];
+
+    // Transform attribute name like Alpine.js does
+    let transformedName = attrName;
+    if (attrName.startsWith('@')) {
+      transformedName = attrName.replace('@', 'x-on:');
+    } else if (attrName.startsWith(':')) {
+      transformedName = attrName.replace(':', 'x-bind:');
+    }
+
+    // Parse the directive using Alpine's logic
+    const typeMatch = transformedName.match(alpineAttributeRegex());
+    if (typeMatch) {
+      // Calculate absolute position in original HTML
+      const attrStartInTemplate = match.index + match[0].indexOf(quote) + 1;
+      const expressionStart = startOffset + attrStartInTemplate;
+      const expressionEnd = expressionStart + attrValue.length;
+
+      directives.push({
+        type: typeMatch[1],
+        value: attrValue,
+        htmlStart: getPositionFromOffset(html, expressionStart),
+        htmlEnd: getPositionFromOffset(html, expressionEnd),
+        position: startOffset + match.index,
+        modifiers: [],
+        directiveName: attrName,
+        loopContext: loopContext
+      });
+    }
+  }
+
+  return directives;
 }
 
 // Helper functions
@@ -235,23 +285,19 @@ function extractXDataProperties(xDataContent) {
 
 // Main transformation function with Alpine.js parsing
 function transformHtmlToTypeScript(htmlContent) {
-  console.log('🔄 Transforming HTML to TypeScript (Alpine.js style)...');
-
   // Find x-data content
   const xDataMatch = htmlContent.match(/x-data=(["'])((?:\\.|(?!\1)[^\\])*?)\1/s);
   const xDataContent = xDataMatch ? xDataMatch[2] : '{}';
-  console.log('📊 Found x-data:', xDataContent);
 
-  // Use Alpine.js-style directive parsing
+  // Use Alpine.js-style directive parsing (working version)
   const directives = findAlpineDirectives(htmlContent);
-  console.log(`📋 Found ${directives.length} directives:`, directives.map(d => `${d.type}="${d.value}"`));
+
 
   const mappings = [];
   const lines = [];
 
   // Extract x-data properties
   const dataProperties = extractXDataProperties(xDataContent);
-  console.log('🔑 Extracted properties:', dataProperties);
 
   // Group directives by their loop context for optimization
   const contextGroups = new Map();
@@ -294,8 +340,6 @@ function transformHtmlToTypeScript(htmlContent) {
     contextGroups.get(contextKey).push(directive);
   }
 
-  console.log(`📦 Grouped ${directives.length} directives into ${contextGroups.size} context groups`);
-
   // Generate TypeScript with EXACT column preservation - grouped by context
   for (const [contextKey, groupDirectives] of contextGroups) {
     const functionName = `${contextKey}Expressions`;
@@ -305,13 +349,6 @@ function transformHtmlToTypeScript(htmlContent) {
     const xDataDirective = directives.find(d => d.type === 'data' && d.xDataIndex === firstDirective.xDataIndex);
     const groupXDataContent = xDataDirective ? xDataDirective.value : '{}';
     const groupDataProperties = extractXDataProperties(groupXDataContent);
-
-    console.log(`\n🔨 Generating grouped function ${functionName} for ${groupDirectives.length} expressions`);
-    console.log(`   Context: ${contextKey}`);
-    console.log(`   X-data: ${groupXDataContent.substring(0, 50)}...`);
-    if (firstDirective.loopContext && firstDirective.loopContext.length > 0) {
-      console.log(`   Loop context: ${firstDirective.loopContext.map(l => `${l.item} of ${l.items}`).join(' > ')}`);
-    }
 
     // Function declaration
     lines.push(`function ${functionName}() {`);
@@ -344,8 +381,6 @@ function transformHtmlToTypeScript(htmlContent) {
     // Process all directives in this group
     for (const directive of groupDirectives) {
       const expressionId = `expr_${directive.htmlStart.line}_${directive.htmlStart.character}`;
-
-      console.log(`   📍 ${expressionId}: "${directive.value}" at line ${directive.htmlStart.line}, col ${directive.htmlStart.character}`);
 
       // NEW WAY: Window approach with perfect column alignment
       const originalColumn = directive.htmlStart.character;
@@ -474,9 +509,7 @@ function transformHtmlToTypeScript(htmlContent) {
     mappings: mappings
   };
 
-  console.log('✅ Transformation complete!');
-  console.log(`📄 Generated ${lines.length} lines of TypeScript`);
-  console.log(`🗺️  Created ${mappings.length} mappings`);
+  console.log(`Generated ${lines.length} lines, ${mappings.length} mappings`);
 
   return result;
 }
@@ -496,8 +529,4 @@ if (require.main === module) {
   const htmlContent = fs.readFileSync(htmlFile, 'utf-8');
   const result = transformHtmlToTypeScript(htmlContent);
 
-  console.log('\n📄 Generated TypeScript:');
-  console.log('=====================================');
-  console.log(result.tsContent);
-  console.log('=====================================');
 }
