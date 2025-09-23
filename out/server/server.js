@@ -17239,12 +17239,6 @@ var require_transform_html_to_ts_alpine = __commonJS({
       const document = parse(html, { sourceCodeLocationInfo: true });
       const directives = [];
       function walkNode(node, loopContext = []) {
-        if (node.tagName && node.sourceCodeLocation) {
-          const alpineAttrs = node.attrs?.filter((attr) => alpineAttributeRegex().test(attr.name) || attr.name.startsWith("@") || attr.name.startsWith(":")) || [];
-          if (alpineAttrs.length > 0) {
-            console.log(`\u{1F6B6} <${node.tagName}> line ${node.sourceCodeLocation.startLine}: ${alpineAttrs.map((a) => `${a.name}="${a.value}"`).join(", ")}`);
-          }
-        }
         let currentLoopContext = [...loopContext];
         if (node.tagName && node.attrs && node.sourceCodeLocation) {
           const forAttr = node.attrs.find((attr) => attr.name === "x-for");
@@ -17439,7 +17433,7 @@ var require_transform_html_to_ts_alpine = __commonJS({
               const itemPart = match[1];
               const itemsPart = match[2];
               const itemMatch = itemPart.match(/^(.+)_(.+)$/);
-              if (itemMatch && itemMatch[2].includes("Index")) {
+              if (itemMatch && (itemMatch[2].includes("index") || itemMatch[2].includes("Index"))) {
                 loops.push({
                   item: itemMatch[1],
                   index: itemMatch[2],
@@ -17483,6 +17477,7 @@ var require_transform_html_to_ts_alpine = __commonJS({
           const expressionId = `expr_${directive.htmlStart.line}_${directive.htmlStart.character}`;
           const originalColumn = directive.htmlStart.character;
           const indent = "  " + "  ".repeat(allLoops.length);
+          lines.push(`${indent}// ${directive.type}: ${directive.value}`);
           lines.push(`${indent}"${expressionId}_START";`);
           const padding = " ".repeat(originalColumn);
           if (directive.type === "for") {
@@ -17494,6 +17489,13 @@ var require_transform_html_to_ts_alpine = __commonJS({
               const itemPadding = " ".repeat(originalColumn + itemStartInValue);
               lines.push(itemPadding + `${parsed.item};`);
               lines.push(`${indent}"${expressionId}_item_END";`);
+              if (parsed.index) {
+                lines.push(`${indent}"${expressionId}_index_START";`);
+                const indexStartInValue = directive.value.indexOf(parsed.index);
+                const indexPadding = " ".repeat(originalColumn + indexStartInValue);
+                lines.push(indexPadding + `${parsed.index};`);
+                lines.push(`${indent}"${expressionId}_index_END";`);
+              }
               lines.push(`${indent}"${expressionId}_items_START";`);
               const itemsStartInValue = directive.value.indexOf(parsed.items);
               const itemsPadding = " ".repeat(originalColumn + itemsStartInValue);
@@ -17533,6 +17535,25 @@ var require_transform_html_to_ts_alpine = __commonJS({
                 parentData: groupXDataContent,
                 loopContext: directive.loopContext
               });
+              if (parsed.index) {
+                const indexStartInValue = directive.value.indexOf(parsed.index);
+                mappings.push({
+                  expressionId: `${expressionId}_index`,
+                  expression: parsed.index,
+                  directiveName: "for-index",
+                  htmlExpressionStart: {
+                    line: directive.htmlStart.line,
+                    character: directive.htmlStart.character + indexStartInValue
+                  },
+                  htmlExpressionEnd: {
+                    line: directive.htmlStart.line,
+                    character: directive.htmlStart.character + indexStartInValue + parsed.index.length
+                  },
+                  modifiers: directive.modifiers,
+                  parentData: groupXDataContent,
+                  loopContext: directive.loopContext
+                });
+              }
               mappings.push({
                 expressionId: `${expressionId}_items`,
                 expression: parsed.items,
@@ -18309,7 +18330,15 @@ var LineBasedTypeScriptService = class {
     this.currentMappings = [];
     this.fileVersions = /* @__PURE__ */ new Map();
     this.maxVersionHistory = 10;
-    this.tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "alpine-lsp-"));
+    this.tempDir = path.join(os.tmpdir(), "alpine-lsp-fixed");
+    if (fs.existsSync(this.tempDir)) {
+      const files = fs.readdirSync(this.tempDir);
+      for (const file of files) {
+        fs.unlinkSync(path.join(this.tempDir, file));
+      }
+    } else {
+      fs.mkdirSync(this.tempDir, { recursive: true });
+    }
     console.log(`Alpine LSP temp directory: ${this.tempDir}`);
     this.setupLanguageService();
   }

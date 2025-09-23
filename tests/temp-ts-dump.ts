@@ -84,10 +84,15 @@ function xdata2_user_of_users__user_of_usersExpressions() {
   }
 }
 
+
 function xdata2_user_of_usersExpressions() {
   const data = { users: [{ id: 1, name: 'John' }, { id: 2, name: 'Jane' }] };
   let { users } = data;
-  for (const user of users) {
+  for (
+    // EXPRESSION START
+    const user of users
+    // EXPRESSION END
+  ) {
     "expr_24_30_START";
                               user.id;
     "expr_24_30_END";

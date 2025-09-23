@@ -16,8 +16,20 @@ export class LineBasedTypeScriptService {
   private tempDir: string;
 
   constructor() {
-    // Create temp directory for real TypeScript files
-    this.tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alpine-lsp-'));
+    // Create fixed temp directory for real TypeScript files (reuse same dir)
+    this.tempDir = path.join(os.tmpdir(), 'alpine-lsp-fixed');
+
+    // Ensure directory exists and clear it
+    if (fs.existsSync(this.tempDir)) {
+      // Clear existing files
+      const files = fs.readdirSync(this.tempDir);
+      for (const file of files) {
+        fs.unlinkSync(path.join(this.tempDir, file));
+      }
+    } else {
+      fs.mkdirSync(this.tempDir, { recursive: true });
+    }
+
     console.log(`Alpine LSP temp directory: ${this.tempDir}`);
     this.setupLanguageService();
   }

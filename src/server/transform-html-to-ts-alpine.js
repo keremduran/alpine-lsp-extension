@@ -94,13 +94,6 @@ function findAlpineDirectives(html) {
 
   // Walk the parse5 AST and find Alpine directives
   function walkNode(node, loopContext = []) {
-    // Debug: Log elements being visited (condensed)
-    if (node.tagName && node.sourceCodeLocation) {
-      const alpineAttrs = node.attrs?.filter(attr => alpineAttributeRegex().test(attr.name) || attr.name.startsWith('@') || attr.name.startsWith(':')) || [];
-      if (alpineAttrs.length > 0) {
-        console.log(`🚶 <${node.tagName}> line ${node.sourceCodeLocation.startLine}: ${alpineAttrs.map(a => `${a.name}="${a.value}"`).join(', ')}`);
-      }
-    }
 
     // Check if this element has x-for to update loop context
     let currentLoopContext = [...loopContext];
@@ -398,10 +391,10 @@ function transformHtmlToTypeScript(htmlContent) {
           const itemPart = match[1];
           const itemsPart = match[2];
 
-          // Check if there's an index (e.g., "user_userIndex")
+          // Check if there's an index (e.g., "item_index")
           const itemMatch = itemPart.match(/^(.+)_(.+)$/);
-          if (itemMatch && itemMatch[2].includes('Index')) {
-            // Has index: "user_userIndex" -> item="user", index="userIndex"
+          if (itemMatch && (itemMatch[2].includes('index') || itemMatch[2].includes('Index'))) {
+            // Has index: "item_index" -> item="item", index="index"
             loops.push({
               item: itemMatch[1],
               index: itemMatch[2],
@@ -423,7 +416,7 @@ function transformHtmlToTypeScript(htmlContent) {
     // Add loop contexts (nested loops) - parse from context name
     const allLoops = parseContextLoops(contextKey);
     for (const loop of allLoops) {
-      // Convert to TypeScript for-loops
+      // Generate TypeScript loops - forEach for index, for-of for simple
       if (loop.index) {
         lines.push(`  ${loop.items}.forEach((${loop.item}, ${loop.index}) => {`);
       } else {
@@ -440,6 +433,7 @@ function transformHtmlToTypeScript(htmlContent) {
 
       // Add metadata as string literals (won't cause syntax errors)
       const indent = '  ' + '  '.repeat(allLoops.length);
+      lines.push(`${indent}// ${directive.type}: ${directive.value}`);
       lines.push(`${indent}"${expressionId}_START";`);
 
       // Create exact column padding to match HTML position
@@ -453,14 +447,23 @@ function transformHtmlToTypeScript(htmlContent) {
 
           // Create TWO separate hoverable expressions:
 
-          // 1. Expression for the loop variable (tag)
+          // 1. Expression for the loop variable (item)
           lines.push(`${indent}"${expressionId}_item_START";`);
           const itemStartInValue = directive.value.indexOf(parsed.item);
           const itemPadding = ' '.repeat(originalColumn + itemStartInValue);
           lines.push(itemPadding + `${parsed.item};`);
           lines.push(`${indent}"${expressionId}_item_END";`);
 
-          // 2. Expression for the collection (product.tags)
+          // 2. Expression for the index (if present)
+          if (parsed.index) {
+            lines.push(`${indent}"${expressionId}_index_START";`);
+            const indexStartInValue = directive.value.indexOf(parsed.index);
+            const indexPadding = ' '.repeat(originalColumn + indexStartInValue);
+            lines.push(indexPadding + `${parsed.index};`);
+            lines.push(`${indent}"${expressionId}_index_END";`);
+          }
+
+          // 3. Expression for the collection (colors)
           lines.push(`${indent}"${expressionId}_items_START";`);
           const itemsStartInValue = directive.value.indexOf(parsed.items);
           const itemsPadding = ' '.repeat(originalColumn + itemsStartInValue);
@@ -488,7 +491,7 @@ function transformHtmlToTypeScript(htmlContent) {
       if (directive.type === 'for') {
         const parsed = parseForExpression(directive.value);
         if (parsed) {
-          // Create two separate mappings for x-for with correct column positions
+          // Create separate mappings for x-for with correct column positions
           const itemStartInValue = directive.value.indexOf(parsed.item);
           const itemsStartInValue = directive.value.indexOf(parsed.items);
 
@@ -508,6 +511,27 @@ function transformHtmlToTypeScript(htmlContent) {
             parentData: groupXDataContent,
             loopContext: directive.loopContext
           });
+
+          // Add index mapping if present
+          if (parsed.index) {
+            const indexStartInValue = directive.value.indexOf(parsed.index);
+            mappings.push({
+              expressionId: `${expressionId}_index`,
+              expression: parsed.index,
+              directiveName: 'for-index',
+              htmlExpressionStart: {
+                line: directive.htmlStart.line,
+                character: directive.htmlStart.character + indexStartInValue
+              },
+              htmlExpressionEnd: {
+                line: directive.htmlStart.line,
+                character: directive.htmlStart.character + indexStartInValue + parsed.index.length
+              },
+              modifiers: directive.modifiers,
+              parentData: groupXDataContent,
+              loopContext: directive.loopContext
+            });
+          }
 
           mappings.push({
             expressionId: `${expressionId}_items`,
@@ -544,9 +568,9 @@ function transformHtmlToTypeScript(htmlContent) {
     for (let i = allLoops.length - 1; i >= 0; i--) {
       const loop = allLoops[i];
       if (loop.index) {
-        lines.push('  ' + '  '.repeat(i) + '});');
+        lines.push('  ' + '  '.repeat(i) + '});');  // forEach closing
       } else {
-        lines.push('  ' + '  '.repeat(i) + '}');
+        lines.push('  ' + '  '.repeat(i) + '}');    // for-of closing
       }
     }
 

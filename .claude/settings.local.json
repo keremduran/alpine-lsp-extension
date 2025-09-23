@@ -9,9 +9,9 @@
       "Bash(npx vsce:*)",
       "Bash(npm run build-server:*)",
       "Bash(npx ts-node:*)",
-      "Read(//var/folders/6f/_q_sbkwj1xn7klyst6jdfjkm0000gn/T/alpine-lsp-Y07s5K/**)",
       "Bash(cat:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Read(//private/var/folders/**)"
     ],
     "deny": [],
     "ask": []
