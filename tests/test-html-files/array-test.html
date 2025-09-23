@@ -8,9 +8,10 @@
 </head>
 <body>
     <!-- Simple array test -->
-    <div x-data="{ items: ['Apple', 'Banana', 'Orange'] }">
+h    <div x-data="{ user: {name: 'Hello', age: 92}, items: ['Apple', 'Banana', 'Orange'] }">
+        <div x-text="user.name"></div>
+        <div x-text="user.age"></div>
         <div x-text="items"></div>
-
         <template x-for="item in items">
             <div x-text="item"></div>
         </template>

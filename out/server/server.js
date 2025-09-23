@@ -18677,9 +18677,19 @@ connection.onHover((params) => {
     console.log(`  Character at position: "${hoverChar}"`);
     console.log(`  Context: "${hoverLine.substring(Math.max(0, params.position.character - 10), params.position.character + 10)}"`);
     const transformation = (0, import_transform_html_to_ts_alpine.transformHtmlToTypeScript)(document.getText());
-    const mapping = transformation.mappings.find(
-      (m) => m.htmlExpressionStart.line === params.position.line && params.position.character >= m.htmlExpressionStart.character && params.position.character <= m.htmlExpressionEnd.character
-    );
+    const mapping = transformation.mappings.find((m) => {
+      const posLine = params.position.line;
+      const posChar = params.position.character;
+      const startLine = m.htmlExpressionStart.line;
+      const endLine = m.htmlExpressionEnd.line;
+      if (startLine === endLine) {
+        return posLine === startLine && posChar >= m.htmlExpressionStart.character && posChar <= m.htmlExpressionEnd.character;
+      } else {
+        return posLine === startLine && posChar >= m.htmlExpressionStart.character || // On start line after start
+        posLine > startLine && posLine < endLine || // On middle line
+        posLine === endLine && posChar <= m.htmlExpressionEnd.character;
+      }
+    });
     if (!mapping) {
       console.log(`\u274C NO MAPPING FOUND`);
       console.log(`  Looking for expressions containing line ${params.position.line}, char ${params.position.character}`);
@@ -18718,20 +18728,42 @@ connection.onHover((params) => {
       connection.console.log("\u274C Could not find expression in generated TypeScript");
       return null;
     }
-    const htmlCharOffset = params.position.character - mapping.htmlExpressionStart.character;
+    const hoverOffset = document.offsetAt(params.position);
+    const expressionStartOffset = document.offsetAt({
+      line: mapping.htmlExpressionStart.line,
+      character: mapping.htmlExpressionStart.character
+    });
+    const offsetInExpression = hoverOffset - expressionStartOffset;
     const expressionLine = lines[expressionLineIndex];
     const expressionContent = expressionLine.trim();
     const expressionStartInLine = expressionLine.indexOf(expressionContent);
-    const tsPosition = expressionStartInLine + htmlCharOffset;
+    let tsOffset = 0;
+    for (let i = 0; i < expressionLineIndex; i++) {
+      tsOffset += lines[i].length + 1;
+    }
+    tsOffset += expressionStartInLine + offsetInExpression;
     console.log(`\u{1F50D} TYPESCRIPT QUERY:`);
     console.log(`  TS file: ${tempFileUri}`);
-    console.log(`  TS line ${expressionLineIndex}: "${expressionLine}"`);
-    console.log(`  TS character: ${tsPosition}`);
-    console.log(`  Char at position: "${expressionLine[tsPosition] || "EOF"}"`);
+    console.log(`  TS absolute offset: ${tsOffset}`);
+    console.log(`  Offset within expression: ${offsetInExpression}`);
+    let currentOffset = 0;
+    let targetLine = 0;
+    let targetChar = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const lineLength = lines[i].length;
+      if (currentOffset + lineLength >= tsOffset) {
+        targetLine = i;
+        targetChar = tsOffset - currentOffset;
+        break;
+      }
+      currentOffset += lineLength + 1;
+    }
+    console.log(`  TS position: line ${targetLine}, char ${targetChar}`);
+    console.log(`  Line content: "${lines[targetLine]}"`);
     const tsHover = virtualTsService.getQuickInfoAtPosition(
       tempFileUri,
-      expressionLineIndex,
-      tsPosition
+      targetLine,
+      targetChar
     );
     if (!tsHover) {
       console.log(`\u274C NO TYPESCRIPT HOVER INFO`);
